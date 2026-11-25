@@ -293,6 +293,34 @@ class MainActivity : ComponentActivity() {
         fun castState(): String = RadioService.castDevice
 
         @JavascriptInterface
+        fun eqInfo(): String = RadioService.instance?.eqInfo() ?: ""
+
+        @JavascriptInterface
+        fun eqSet(json: String) { RadioService.instance?.eqSet(json) }
+
+        @JavascriptInterface
+        fun setLag(bauer: Double, other: Double) {
+            val s = RadioService.instance
+            if (s != null) s.setLag(bauer.toLong(), other.toLong())
+            else getSharedPreferences("radio", MODE_PRIVATE).edit().putLong("lagB", bauer.toLong()).putLong("lagO", other.toLong()).apply()
+        }
+
+        @JavascriptInterface
+        fun version(): String = try {
+            val p = packageManager.getPackageInfo(packageName, 0)
+            "versão " + (p.versionName ?: "1.0") + " (" + (if (Build.VERSION.SDK_INT >= 28) p.longVersionCode else p.versionCode.toLong()) + ")"
+        } catch (e: Exception) { "" }
+
+        @JavascriptInterface
+        fun battery() {
+            runOnUiThread {
+                try {
+                    startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                } catch (e: Exception) {}
+            }
+        }
+
+        @JavascriptInterface
         fun cast() {
             runOnUiThread {
                 try {

@@ -46,8 +46,9 @@ class RadioService : MediaLibraryService() {
     companion object {
         @Volatile var instance: RadioService? = null
         const val WORKER = "https://radio-meta.foot4.workers.dev"
-        const val LAG = 16000L // o som chega uns segundos depois de a rádio anunciar a música
-        const val LAG_BAUER = 55000L // na Bauer cada ligação começa com publicidade
+        // o som chega uns segundos depois de a rádio anunciar a música (ajustável nas Definições)
+        @Volatile var LAG = 16000L
+        @Volatile var LAG_BAUER = 55000L // na Bauer cada ligação começa com publicidade
         @Volatile var appVisible = false
         @Volatile var ringing = false
         @Volatile var ringName = ""
@@ -264,6 +265,11 @@ class RadioService : MediaLibraryService() {
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) { nowGen++; if (!appVisible) kickNow() }
+                if (mediaItem != null) saveLast(mediaItem)
+            }
+
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                setupEq()
             }
 
             override fun onMetadata(metadata: androidx.media3.common.Metadata) {
@@ -277,6 +283,8 @@ class RadioService : MediaLibraryService() {
         session = MediaLibrarySession.Builder(this, player, LibraryCallback())
             .setSessionActivity(open)
             .build()
+        LAG = prefs.getLong("lagO", LAG); LAG_BAUER = prefs.getLong("lagB", LAG_BAUER)
+        setupEq()
         try {
             val cc = CastContext.getSharedInstance(this)
             castPlayer = CastPlayer(cc, CastConverter()).also { cp ->
@@ -331,6 +339,78 @@ class RadioService : MediaLibraryService() {
             target.prepare()
             target.playWhenReady = play
         }
+    }
+
+    // ---------- equalizador ----------
+    private var eq: android.media.audiofx.Equalizer? = null
+
+    private fun setupEq() {
+        try {
+            eq?.release()
+            eq = android.media.audiofx.Equalizer(0, player.audioSessionId)
+            applyEq()
+        } catch (e: Throwable) { eq = null }
+    }
+
+    private fun applyEq() {
+        val e = eq ?: return
+        val o = try { org.json.JSONObject(prefs.getString("eq", "{}") ?: "{}") } catch (x: Exception) { org.json.JSONObject() }
+        try {
+            val on = o.optBoolean("on", false)
+            e.enabled = on
+            if (!on) return
+            val p = o.optInt("preset", -1)
+            if (p >= 0 && p < e.numberOfPresets) e.usePreset(p.toShort())
+            else {
+                val lv = o.optJSONArray("levels")
+                if (lv != null) for (i in 0 until minOf(lv.length(), e.numberOfBands.toInt())) e.setBandLevel(i.toShort(), lv.getInt(i).toShort())
+            }
+        } catch (x: Throwable) {}
+    }
+
+    fun eqInfo(): String {
+        val e = eq ?: return ""
+        val o = try { org.json.JSONObject(prefs.getString("eq", "{}") ?: "{}") } catch (x: Exception) { org.json.JSONObject() }
+        return try {
+            val r = e.bandLevelRange
+            val freqs = org.json.JSONArray(); val levels = org.json.JSONArray(); val presets = org.json.JSONArray()
+            for (i in 0 until e.numberOfBands) { freqs.put(e.getCenterFreq(i.toShort()) / 1000); levels.put(e.getBandLevel(i.toShort()).toInt()) }
+            for (i in 0 until e.numberOfPresets) presets.put(e.getPresetName(i.toShort()))
+            org.json.JSONObject().put("on", o.optBoolean("on", false)).put("preset", o.optInt("preset", -1))
+                .put("min", r[0].toInt()).put("max", r[1].toInt()).put("freqs", freqs).put("levels", levels).put("presets", presets).toString()
+        } catch (x: Throwable) { "" }
+    }
+
+    fun eqSet(json: String) {
+        val n = try { org.json.JSONObject(json) } catch (x: Exception) { return }
+        val o = try { org.json.JSONObject(prefs.getString("eq", "{}") ?: "{}") } catch (x: Exception) { org.json.JSONObject() }
+        for (k in n.keys()) o.put(k, n.get(k))
+        if (!n.has("preset") && n.optBoolean("on")) { if (!o.has("preset")) o.put("preset", 0) }
+        prefs.edit().putString("eq", o.toString()).apply()
+        ui.post { applyEq() }
+    }
+
+    fun setLag(bauer: Long, other: Long) {
+        LAG_BAUER = bauer; LAG = other
+        prefs.edit().putLong("lagB", bauer).putLong("lagO", other).apply()
+    }
+
+    // última rádio, para retomar pelo Bluetooth, auscultadores ou Android Auto
+    private fun saveLast(item: MediaItem) {
+        if (item.mediaId.startsWith("ep:")) return
+        val uri = item.localConfiguration?.uri?.toString() ?: item.requestMetadata.mediaUri?.toString() ?: return
+        val st = Stations.find(this, item.mediaId)
+        val o = org.json.JSONObject().put("id", item.mediaId).put("url", uri)
+            .put("name", st?.name ?: item.mediaMetadata.station?.toString() ?: item.mediaMetadata.title?.toString() ?: "Rádio")
+            .put("logo", st?.logo ?: sources[item.mediaId]?.logo ?: "")
+        prefs.edit().putString("lastItem", o.toString()).apply()
+    }
+
+    fun lastItem(): MediaItem? {
+        val o = try { org.json.JSONObject(prefs.getString("lastItem", "") ?: "") } catch (e: Exception) { return null }
+        val id = o.optString("id"); val url = o.optString("url")
+        if (id.isEmpty() || url.isEmpty()) return null
+        return Stations.playable(id, url, Stations.metadata(o.optString("name"), o.optString("logo")))
     }
 
     // ---------- temporizador ----------
@@ -450,6 +530,7 @@ class RadioService : MediaLibraryService() {
         ui.removeCallbacks(saver)
         ui.removeCallbacks(nowLoop)
         ui.removeCallbacks(sleeper); ui.removeCallbacks(ramper); ui.removeCallbacks(watchdog)
+        try { eq?.release() } catch (e: Throwable) {}
         try { ringtone?.stop() } catch (e: Exception) {}
         castPlayer?.setSessionAvailabilityListener(null)
         castPlayer?.release()
@@ -584,6 +665,15 @@ class RadioService : MediaLibraryService() {
             Futures.immediateFuture(mediaItems.map { resolve(it) }.toMutableList())
 
         // episódios começam onde ficaste
+        // botão "tocar" do Bluetooth, auscultadores ou do carro sem nada escolhido: a última rádio
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val it = lastItem() ?: return Futures.immediateFailedFuture(UnsupportedOperationException())
+            return Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(listOf(it), 0, C.TIME_UNSET))
+        }
+
         override fun onSetMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
