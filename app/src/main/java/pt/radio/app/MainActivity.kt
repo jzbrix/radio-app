@@ -30,6 +30,12 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import org.json.JSONObject
+import android.view.ContextThemeWrapper
+import androidx.mediarouter.app.MediaRouteChooserDialog
+import androidx.mediarouter.app.MediaRouteControllerDialog
+import androidx.mediarouter.media.MediaRouteSelector
+import com.google.android.gms.cast.CastMediaControlIntent
+import com.google.android.gms.cast.framework.CastContext
 
 /** Ecrã da app: mostra a app web (radiopt.pages.dev) e passa a reprodução para o leitor nativo. */
 class MainActivity : ComponentActivity() {
@@ -95,6 +101,20 @@ class MainActivity : ComponentActivity() {
         ) askNotif.launch(Manifest.permission.POST_NOTIFICATIONS)
 
         connect()
+        RadioService.onEvent = { ev, arg -> emit(ev, arg) }
+        handleAlarm(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleAlarm(intent)
+    }
+
+    /** O despertador abriu a app: mostrar por cima do ecrã bloqueado. */
+    private fun handleAlarm(i: Intent?) {
+        if (i?.action != Alarm.ACTION) return
+        if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
+        if (RadioService.ringing) emit("alarm", JSONObject().put("name", RadioService.ringName).toString())
     }
 
     // com a app à vista, quem atualiza a música é a página; escondida, é o serviço
@@ -117,6 +137,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         ui.removeCallbacks(ticker)
+        RadioService.onEvent = null
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controller = null
         web.destroy()
@@ -239,6 +260,57 @@ class MainActivity : ComponentActivity() {
             o.put("a1d", hex(android.R.color.system_accent1_700))
             o.put("n", hex(android.R.color.system_neutral1_900))
             return o.toString()
+        }
+
+        @JavascriptInterface
+        fun sleep(ms: Double) {
+            val s = RadioService.instance
+            if (s != null) s.sleep(ms.toLong()) else withController { _ -> RadioService.instance?.sleep(ms.toLong()) }
+        }
+
+        @JavascriptInterface
+        fun getAlarm(): String = Alarm.get(this@MainActivity).toString()
+
+        @JavascriptInterface
+        fun setAlarm(json: String): String = Alarm.save(this@MainActivity, json)
+
+        @JavascriptInterface
+        fun alarmState(): String = JSONObject().put("ringing", RadioService.ringing).put("name", RadioService.ringName).toString()
+
+        @JavascriptInterface
+        fun alarmStop(stopRadio: Boolean) {
+            RadioService.instance?.alarmStop(stopRadio)
+            runOnUiThread { if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(false); setTurnScreenOn(false) } }
+        }
+
+        @JavascriptInterface
+        fun snooze(min: Int) {
+            RadioService.instance?.snooze(min)
+            runOnUiThread { if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(false); setTurnScreenOn(false) } }
+        }
+
+        @JavascriptInterface
+        fun castState(): String = RadioService.castDevice
+
+        @JavascriptInterface
+        fun cast() {
+            runOnUiThread {
+                try {
+                    val cc = CastContext.getSharedInstance(this@MainActivity)
+                    val themed = ContextThemeWrapper(this@MainActivity, androidx.appcompat.R.style.Theme_AppCompat)
+                    if (cc.sessionManager.currentCastSession?.isConnected == true) {
+                        MediaRouteControllerDialog(themed).show()
+                    } else {
+                        val d = MediaRouteChooserDialog(themed)
+                        d.routeSelector = MediaRouteSelector.Builder()
+                            .addControlCategory(CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
+                            .build()
+                        d.show()
+                    }
+                } catch (e: Throwable) {
+                    emit("toast", "Não foi possível procurar dispositivos (falta o Google Play Services?)")
+                }
+            }
         }
 
         @JavascriptInterface

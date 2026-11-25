@@ -11,6 +11,17 @@ import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import com.google.common.util.concurrent.MoreExecutors
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
+import androidx.core.app.NotificationCompat
+import androidx.media3.cast.CastPlayer
+import androidx.media3.cast.SessionAvailabilityListener
+import androidx.media3.common.MimeTypes
+import com.google.android.gms.cast.framework.CastContext
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -36,6 +47,10 @@ class RadioService : MediaLibraryService() {
         @Volatile var instance: RadioService? = null
         const val WORKER = "https://radio-meta.foot4.workers.dev"
         @Volatile var appVisible = false
+        @Volatile var ringing = false
+        @Volatile var ringName = ""
+        @Volatile var castDevice = ""
+        var onEvent: ((String, String) -> Unit)? = null
         val sources = ConcurrentHashMap<String, Src>()
     }
 
@@ -47,17 +62,17 @@ class RadioService : MediaLibraryService() {
     private val nowLoop = object : Runnable {
         override fun run() {
             ui.removeCallbacks(this)
-            val item = player.currentMediaItem
-            if (item == null || item.mediaId.startsWith("ep:") || !player.playWhenReady || appVisible) return
+            val item = active.currentMediaItem
+            if (item == null || item.mediaId.startsWith("ep:") || !active.playWhenReady || appVisible) return
             val id = item.mediaId
-            val url = item.localConfiguration?.uri?.toString() ?: ""
+            val url = item.localConfiguration?.uri?.toString() ?: item.requestMetadata.mediaUri?.toString() ?: ""
             val st = Stations.find(this@RadioService, id)
             val src = sources[id] ?: Src(st?.name ?: "", st?.code ?: "", st?.triton ?: "")
             val g = ++nowGen
             io.execute {
                 val r = try { fetchNow(src, url) } catch (e: Exception) { null }
                 ui.post {
-                    if (g != nowGen || player.currentMediaItem?.mediaId != id || appVisible) return@post
+                    if (g != nowGen || active.currentMediaItem?.mediaId != id || appVisible) return@post
                     if (r != null) applyNow(r.first, r.second)
                     ui.postDelayed(this, 15000)
                 }
@@ -142,14 +157,33 @@ class RadioService : MediaLibraryService() {
     }
 
     private fun findArt(artist: String, title: String): String {
-        val q = URLEncoder.encode("$artist $title".trim(), "UTF-8")
+        val a0 = artist.replace(Regex("\\s+(feat\\.?|ft\\.?|featuring|&|e|x|vs\\.?)\\s+.*$", RegexOption.IGNORE_CASE), "").replace(Regex(",.*$"), "").trim()
+        var t = title.replace(Regex("\\s*[(\\[].*?[)\\]]\\s*"), " ").replace(Regex("\\s+-\\s+.*$"), "")
+            .replace(Regex("\\b(feat\\.?|ft\\.?|featuring)\\b.*$", RegexOption.IGNORE_CASE), "").trim()
+        val t2 = if (t.any { it.isLowerCase() }) t.replace(Regex("(\\s+[\\p{Lu}0-9'’.]{2,})+$"), "").trim() else t
+        for (tt in listOf(t, t2).distinct().filter { it.isNotEmpty() }) {
+            val q = URLEncoder.encode("$a0 $tt".trim(), "UTF-8")
+            try {
+                val r = org.json.JSONObject(get("https://itunes.apple.com/search?media=music&entity=song&country=PT&limit=1&term=$q", 8000)).optJSONArray("results")
+                val a = r?.optJSONObject(0)?.optString("artworkUrl100") ?: ""
+                if (a.isNotEmpty()) return a.replace("100x100bb", "600x600bb")
+            } catch (e: Exception) {}
+            try {
+                val d = org.json.JSONObject(get("https://api.deezer.com/search?limit=1&q=$q", 8000)).optJSONArray("data")
+                val c = d?.optJSONObject(0)?.optJSONObject("album")?.optString("cover_xl") ?: ""
+                if (c.isNotEmpty()) return c
+            } catch (e: Exception) {}
+        }
+        // sem capa: foto do artista; se nem isso, fica o logótipo da rádio
         try {
-            val r = org.json.JSONObject(get("https://itunes.apple.com/search?media=music&entity=song&country=PT&limit=1&term=$q", 8000)).optJSONArray("results")
-            val a = r?.optJSONObject(0)?.optString("artworkUrl100") ?: ""
-            if (a.isNotEmpty()) return a.replace("100x100bb", "600x600bb")
+            val d = org.json.JSONObject(get("https://api.deezer.com/search/artist?limit=1&q=" + URLEncoder.encode(a0, "UTF-8"), 8000)).optJSONArray("data")
+            val x = d?.optJSONObject(0)
+            if (x != null && x.optString("name").equals(a0, true)) {
+                val p = x.optString("picture_xl")
+                if (p.isNotEmpty() && !p.contains("/artist//")) return p
+            }
         } catch (e: Exception) {}
-        val d = org.json.JSONObject(get("https://api.deezer.com/search?limit=1&q=$q", 8000)).optJSONArray("data")
-        return d?.optJSONObject(0)?.optJSONObject("album")?.optString("cover_xl") ?: ""
+        return ""
     }
 
     // músicas que vêm dentro do próprio som (ICY ou ID3)
@@ -239,18 +273,174 @@ class RadioService : MediaLibraryService() {
         session = MediaLibrarySession.Builder(this, player, LibraryCallback())
             .setSessionActivity(open)
             .build()
+        try {
+            val cc = CastContext.getSharedInstance(this)
+            castPlayer = CastPlayer(cc).also { cp ->
+                cp.setSessionAvailabilityListener(object : SessionAvailabilityListener {
+                    override fun onCastSessionAvailable() {
+                        castDevice = cc.sessionManager.currentCastSession?.castDevice?.friendlyName ?: "TV"
+                        switchTo(cp); onEvent?.invoke("cast", castDevice)
+                    }
+                    override fun onCastSessionUnavailable() {
+                        castDevice = ""; switchTo(player); onEvent?.invoke("cast", "")
+                    }
+                })
+                if (cp.isCastSessionAvailable) {
+                    castDevice = cc.sessionManager.currentCastSession?.castDevice?.friendlyName ?: "TV"
+                    switchTo(cp)
+                }
+            }
+        } catch (e: Throwable) { castPlayer = null }
+    }
+
+    // ---------- transmitir (Chromecast) ----------
+    private var castPlayer: CastPlayer? = null
+    val active: Player get() = session?.player ?: player
+
+    private fun castable(item: MediaItem): MediaItem {
+        val r = if (item.localConfiguration == null) resolve(item) else item
+        val uri = r.localConfiguration?.uri?.toString() ?: return r
+        val mime = r.localConfiguration?.mimeType ?: if (uri.contains(".m3u8")) MimeTypes.APPLICATION_M3U8 else MimeTypes.AUDIO_MPEG
+        return r.buildUpon().setMimeType(mime).build()
+    }
+
+    private fun switchTo(target: Player) {
+        val s = session ?: return
+        val from = s.player
+        if (from === target) return
+        val item = from.currentMediaItem
+        val pos = from.currentPosition
+        val play = from.playWhenReady
+        from.stop()
+        s.player = target
+        if (item != null) {
+            val it2 = castable(item)
+            if (item.mediaId.startsWith("ep:")) target.setMediaItem(it2, pos) else target.setMediaItem(it2)
+            target.prepare()
+            target.playWhenReady = play
+        }
+    }
+
+    // ---------- temporizador ----------
+    private val sleeper = Runnable { active.pause(); onEvent?.invoke("sleepdone", "") }
+    fun sleep(ms: Long) { ui.post { ui.removeCallbacks(sleeper); if (ms > 0) ui.postDelayed(sleeper, ms) } }
+
+    // ---------- despertador ----------
+    private var ringtone: Ringtone? = null
+    private var ramp = 0f
+    private val ramper = object : Runnable {
+        override fun run() {
+            ramp = minOf(1f, ramp + 0.05f)
+            player.volume = ramp
+            if (ramp < 1f && ringing) ui.postDelayed(this, 3000)
+        }
+    }
+    private val watchdog = Runnable {
+        if (ringing && !active.isPlaying) try {
+            val u = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            ringtone = RingtoneManager.getRingtone(this, u)?.also { r ->
+                if (android.os.Build.VERSION.SDK_INT >= 28) r.isLooping = true
+                r.play()
+            }
+        } catch (e: Exception) {}
+    }
+
+    private fun alarmNotification(name: String): Notification {
+        val nm = getSystemService(NotificationManager::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel("alarm") == null)
+            nm.createNotificationChannel(NotificationChannel("alarm", "Despertador", NotificationManager.IMPORTANCE_HIGH))
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val full = PendingIntent.getActivity(this, 73, Intent(this, MainActivity::class.java).setAction(Alarm.ACTION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags)
+        val stop = PendingIntent.getService(this, 74, Intent(this, RadioService::class.java).setAction(Alarm.STOP), flags)
+        val snz = PendingIntent.getService(this, 75, Intent(this, RadioService::class.java).setAction(Alarm.SNOOZE), flags)
+        return NotificationCompat.Builder(this, "alarm")
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("Despertador")
+            .setContentText(name)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setFullScreenIntent(full, true)
+            .setContentIntent(full)
+            .setOngoing(true)
+            .addAction(0, "Adiar 10 min", snz)
+            .addAction(0, "Desligar", stop)
+            .build()
+    }
+
+    private fun ring() {
+        val o = Alarm.get(this)
+        val st = o.optJSONObject("st") ?: return
+        val urls = st.optJSONArray("urls")
+        val list = if (urls == null) emptyList() else (0 until urls.length()).map { urls.getString(it) }
+        val id = st.optString("id")
+        val name = st.optString("name", "Rádio")
+        ringing = true; ringName = name
+        try { startForeground(77, alarmNotification(name)) } catch (e: Exception) {}
+        if (o.optLong("snooze", 0L) > 0) { o.remove("snooze") }
+        Alarm.fired(this)
+        sources[id] = Src(name, st.optString("code"), st.optString("triton"))
+        // som audível mesmo que o volume esteja quase a zero
+        try {
+            val am = getSystemService(AudioManager::class.java)
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            if (am.getStreamVolume(AudioManager.STREAM_MUSIC) < max * 2 / 5) am.setStreamVolume(AudioManager.STREAM_MUSIC, max * 2 / 5, 0)
+        } catch (e: Exception) {}
+        if (castPlayer != null && session?.player === castPlayer) switchTo(player)
+        if (list.isNotEmpty()) {
+            fallbackId = id; fallbackUrls = list; fallbackIndex = 0
+            ramp = if (o.optBoolean("ramp", true)) 0.1f else 1f
+            player.volume = ramp
+            player.setMediaItem(Stations.playable(id, list[0], Stations.metadata(name, st.optString("logo"))))
+            player.prepare(); player.play()
+            ui.removeCallbacks(ramper); if (ramp < 1f) ui.postDelayed(ramper, 3000)
+        }
+        ui.removeCallbacks(watchdog); ui.postDelayed(watchdog, 30000)
+        val info = org.json.JSONObject().put("name", name).toString()
+        onEvent?.invoke("alarm", info)
+        try {
+            startActivity(Intent(this, MainActivity::class.java).setAction(Alarm.ACTION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {}
+    }
+
+    fun alarmStop(stopRadio: Boolean) {
+        ui.post {
+            ringing = false
+            ui.removeCallbacks(ramper); ui.removeCallbacks(watchdog)
+            player.volume = 1f
+            try { ringtone?.stop() } catch (e: Exception) {}
+            ringtone = null
+            if (stopRadio) player.pause()
+            getSystemService(NotificationManager::class.java).cancel(77)
+            onEvent?.invoke("alarmoff", "")
+        }
+    }
+
+    fun snooze(min: Int) { alarmStop(true); Alarm.snooze(this, min) }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val r = super.onStartCommand(intent, flags, startId)
+        when (intent?.action) {
+            Alarm.ACTION -> ring()
+            Alarm.STOP -> alarmStop(true)
+            Alarm.SNOOZE -> snooze(10)
+        }
+        return r
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (!player.playWhenReady || player.mediaItemCount == 0) stopSelf()
+        if (!active.playWhenReady || active.mediaItemCount == 0) stopSelf()
     }
 
     override fun onDestroy() {
         instance = null
         ui.removeCallbacks(saver)
         ui.removeCallbacks(nowLoop)
+        ui.removeCallbacks(sleeper); ui.removeCallbacks(ramper); ui.removeCallbacks(watchdog)
+        try { ringtone?.stop() } catch (e: Exception) {}
+        castPlayer?.setSessionAvailabilityListener(null)
+        castPlayer?.release()
         io.shutdown()
         session?.run {
             player.release()
@@ -263,7 +453,7 @@ class RadioService : MediaLibraryService() {
     /** A app no telemóvel diz qual a música a tocar: aparece na notificação e no ecrã do carro. */
     fun updateNow(title: String, artist: String, art: String) {
         val key = "$title|$artist|$art"
-        if (key == lastNow || player.mediaItemCount == 0) return
+        if (key == lastNow || player.mediaItemCount == 0 || active !== player) return
         lastNow = key
         val item = player.currentMediaItem ?: return
         val st = Stations.find(this, item.mediaId)
