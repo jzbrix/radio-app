@@ -35,10 +35,11 @@ jobs:
           path: radio.apk
 
       - name: Publicar versão
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: Rádio (última versão)
-          make_latest: true
-          files: radio.apk
-          body: Descarrega o radio.apk no telemóvel e instala por cima da versão anterior.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5; do
+            gh release upload latest radio.apk --clobber -R "$GITHUB_REPOSITORY" && exit 0
+            echo "nova tentativa em 20 s"; sleep 20
+          done
+          exit 1
