@@ -1507,7 +1507,8 @@ $('#setBody').addEventListener('input',e=>{
 });
 $('#setBody').addEventListener('click',e=>{const p=e.target.closest('#eqP [data-p]');if(!p)return;const i=+p.dataset.p;nat('eqSet',JSON.stringify(i>=0?{on:true,preset:i}:{on:true,preset:-1,levels:eqInfo.levels}));renderSettings()});
 /* retomar a última rádio ao abrir */
-setTimeout(()=>{if(LS.get('resume',false)&&!cur&&audio.paused&&mode==='radio'){const s=byId(LS.get('last',''));if(s)play(s)}},1800);
+/* ao abrir já aparece a última rádio em pausa (cur), por isso basta pô-la a tocar */
+setTimeout(()=>{if(!LS.get('resume',false)||!audio.paused||mode!=='radio')return;const s=cur||byId(LS.get('last',''));if(!s)return;if(cur&&cur.id===s.id)start();else play(s)},2500);
 nat('setLag',lagOf('b')*1000,lagOf('o')*1000);
 /* ---------- transmitir para Chromecast / colunas na rede ---------- */
 let castName='';
