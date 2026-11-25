@@ -44,6 +44,13 @@ svg{width:24px;height:24px;fill:currentColor;flex:none}
 .shin{max-width:620px;margin:0 auto;padding:calc(8px + var(--st)) 20px calc(40px + var(--sb))}
 #v-pods .hd{display:flex;flex-direction:column;align-items:stretch;gap:10px}
 #songsBack{margin-left:-8px}
+.tools{display:flex;align-items:center;gap:6px;margin:2px 0 6px}.sec h2 .tools{margin:0 0 0 auto}
+.tools button{display:flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;border-radius:17px;background:var(--s1);color:var(--mut);font-size:13px;font-weight:600}
+.sec h2 .tools button{margin:0;color:var(--mut);font-size:13px}
+.tools button{white-space:nowrap}.sec h2 .tools .srt span{display:none}.tools svg{flex:none;width:18px;height:18px;fill:currentColor}.tools .srt{margin-right:auto}
+.row.lr{align-items:center;padding:10px 0;border-bottom:1px solid var(--line,rgba(255,255,255,.06));border-radius:0}
+.row.lr .lg{width:56px;height:56px}.row.lr small.np{color:var(--acc2)}
+#pick .lst button.on{color:var(--acc2)}
 .hs{display:flex;gap:12px;overflow-x:auto;margin:0 -16px;padding:0 16px 4px;scrollbar-width:none;scroll-snap-type:x proximity;scroll-padding-inline:16px}.hs::-webkit-scrollbar{display:none}
 .hs .tile{flex:0 0 min(27vw,112px);scroll-snap-align:start}
 .hubrow{display:grid;gap:4px}
@@ -196,10 +203,10 @@ svg{width:24px;height:24px;fill:currentColor;flex:none}
 .pv .bar{height:4px;border-radius:2px;background:var(--s2);overflow:hidden}.pv .bar i{display:block;height:100%;width:0;background:var(--acc)}
 .pv small{display:block;text-align:center;color:var(--mut);font-size:12px;margin-top:6px}
 #appChg[hidden]{display:none}#appChg{display:block;margin:8px auto 0;color:var(--mut);font-size:13px;padding:6px 10px}
-#apps{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:none;align-items:flex-end}#apps.open{display:flex}
-#apps .box{width:100%;background:var(--s1);border-radius:20px 20px 0 0;padding:18px 16px calc(18px + var(--sb))}
-#apps h3{margin:0 0 10px;font-size:18px}#apps .lst button{display:block;width:100%;text-align:left;padding:14px 12px;border-radius:12px;font-size:16px;font-weight:600;color:var(--ink)}
-#apps .lst button:active{background:var(--s2)}#apps label{display:flex;gap:10px;align-items:center;margin:10px 4px 4px;color:var(--mut);font-size:14px}#apps label input{width:20px;height:20px;accent-color:var(--acc)}
+#apps{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:none;align-items:flex-end}#apps.open{display:flex}#pick{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:none;align-items:flex-end}#pick.open{display:flex}
+#apps .box{width:100%;background:var(--s1);border-radius:20px 20px 0 0;padding:18px 16px calc(18px + var(--sb))}#pick .box{width:100%;background:var(--s1);border-radius:20px 20px 0 0;padding:18px 16px calc(18px + var(--sb))}
+#apps h3{margin:0 0 10px;font-size:18px}#apps .lst button{display:block;width:100%;text-align:left;padding:14px 12px;border-radius:12px;font-size:16px;font-weight:600;color:var(--ink)}#pick h3{margin:0 0 10px;font-size:18px}#pick .lst button{display:block;width:100%;text-align:left;padding:14px 12px;border-radius:12px;font-size:16px;font-weight:600;color:var(--ink)}
+#apps .lst button:active{background:var(--s2)}#apps label{display:flex;gap:10px;align-items:center;margin:10px 4px 4px;color:var(--mut);font-size:14px}#apps label input{width:20px;height:20px;accent-color:var(--acc)}#pick .lst button:active{background:var(--s2)}#pick label{display:flex;gap:10px;align-items:center;margin:10px 4px 4px;color:var(--mut);font-size:14px}#pick label input{width:20px;height:20px;accent-color:var(--acc)}
 .ytic{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.18);display:grid;place-items:center;flex:none}
 
 .pvtx{flex:1;display:flex;flex-direction:column}.pvtx small{color:var(--mut);font-size:13px}
@@ -239,6 +246,7 @@ body.npopen #toast{bottom:auto;top:calc(14px + var(--st))}
   <div class="tabs" role="tablist" id="homeTabs">
     <button role="tab" data-t="fav">Favoritas</button><button role="tab" data-t="main">Principais</button><button role="tab" data-t="rayo">Temáticas</button><button role="tab" data-t="all">Todas</button>
   </div>
+  <div class="sec"><div class="tools" id="radTools"></div></div>
   <div class="sec" id="homeBody"><p class="msg">A carregar rádios…</p></div>
 </section>
 
@@ -335,6 +343,7 @@ body.npopen #toast{bottom:auto;top:calc(14px + var(--st))}
 </div>
 
 <div id="apps" aria-hidden="true"><div class="box"><h3>Ouvir com…</h3><div class="lst" id="appLst"></div><label><input type="checkbox" id="appRem" checked> Usar sempre esta app</label></div></div>
+<div id="pick" aria-hidden="true"><div class="box"><h3 id="pickT">Ordenar</h3><div class="lst" id="pickL"></div></div></div>
 <div id="toast" role="status"></div>
 
 <script>
@@ -554,19 +563,74 @@ function renderAll(){
   document.body.classList.toggle('paused',audio.paused);
   pushStations();
 }
+/* ---------- lista ou grelha, e ordenação, em cada separador ---------- */
+const DESC={'c-comercial':'Pop e rock, humor e as manhãs mais ouvidas do país','c-rfm':'Os maiores êxitos, de ontem e de hoje','c-m80':'Clássicos dos anos 70, 80 e 90','c-renascenca':'Informação, conversa e música','c-cidade':'Hits e novidades para os mais novos','c-megahits':'Hits, dança e música nova','c-antena1':'Informação, desporto e música portuguesa','c-antena3':'Música alternativa e novas descobertas','c-smooth':'Jazz, soul e música calma','c-tsf':'Notícias e informação a toda a hora','c-antena2':'Música clássica e cultura','c-observador':'Informação, opinião e debate'};
+function desc(s){
+  if(DESC[s.id])return DESC[s.id];
+  if(s.rayo){const br=(s.name.match(/^(M80|Comercial|Cidade|Smooth|Rádio Comercial)/i)||[])[1];const g=br?s.name.slice(br.length).trim():'';return 'Canal temático'+(br?' da '+br.replace(/^Rádio /,''):'')+(g?' · '+g:'')}
+  const t=(s.tags||[]).slice(0,3).join(' · ');return [t,s.state].filter(Boolean).join(' · ')||'Rádio portuguesa';
+}
+function lrow(s){const on=cur&&cur.id===s.id,np=on&&now.title?now.artist+' – '+now.title:npLine(s);
+  return `<button class="row lr${on?' on':''}" data-id="${esc(s.id)}">${lg(s).replace('</span>',(on?eq:'')+'</span>')}<span class="tx"><b>${esc(s.name)}</b><small>${esc(desc(s))}</small>${np?`<small class="np">${esc(np)}</small>`:''}</span></button>`}
+let lay=LS.get('lay',{}),sorts=LS.get('sorts',{}),plays=LS.get('plays',{});
+const IC_LIST='<svg viewBox="0 0 24 24"><path d="M3 5h4v4H3zm6 1h12v2H9zM3 10h4v4H3zm6 1h12v2H9zM3 15h4v4H3zm6 1h12v2H9z"/></svg>',IC_GRID='<svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>',IC_SORT='<svg viewBox="0 0 24 24"><path d="M3 6h18v2H3zm3 5h12v2H6zm4 5h4v2h-4z"/></svg>';
+const SORTS={
+  radio:[['def','Predefinida'],['az','Nome (A–Z)'],['plays','Mais ouvidas'],['recent','Ouvidas há pouco']],
+  fav:[['def','Ordem em que adicionaste'],['az','Nome (A–Z)'],['plays','Mais ouvidas'],['recent','Ouvidas há pouco']],
+  psubs:[['def','Ordem em que seguiste'],['az','Nome (A–Z)'],['new','Episódio mais recente'],['recent','Ouvidos há pouco']],
+  ptop:[['def','Posição no top'],['az','Nome (A–Z)']]
+};
+const sortSet=k=>SORTS[k==='fav'||k==='psubs'||k==='ptop'?k:'radio'];
+const layOf=k=>lay[k]||'list',sortOf=k=>sorts[k]||'def';
+function tools(k,inH2){
+  const o=sortSet(k).find(x=>x[0]===sortOf(k))||sortSet(k)[0];
+  const SH={def:k==='fav'?'Por adição':k==='psubs'?'Seguidos':k==='ptop'?'Posição no top':'Predefinida',az:'A–Z',plays:'Mais ouvidas',recent:'Recentes',new:'Novidades'};
+  return `<span class="tools"${inH2?'':' style="display:contents"'}><button class="srt" data-sort="${k}">${IC_SORT}${esc(inH2?SH[o[0]]:o[1])}</button><button data-lay="${k}" aria-label="${layOf(k)==='list'?'Ver em grelha':'Ver em lista'}">${layOf(k)==='list'?IC_GRID:IC_LIST}</button></span>`;
+}
+const cmpName=(a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt',{sensitivity:'base'});
+function sortSt(arr,k){
+  const m=sortOf(k),a=arr.slice();
+  if(m==='az')a.sort(cmpName);
+  else if(m==='plays')a.sort((x,y)=>((plays[y.id]||{}).n||0)-((plays[x.id]||{}).n||0));
+  else if(m==='recent')a.sort((x,y)=>((plays[y.id]||{}).t||0)-((plays[x.id]||{}).t||0));
+  return a;
+}
+function podLast(p){const c=podCache[p.id];return (c&&c.episodes[0]&&c.episodes[0].date)||p.last||0}
+function podHeard(p){let t=0;for(const id in epPos){const m=epMeta[id];if(m&&m.podId===p.id)t=Math.max(t,epPos[id].t||0)}return t}
+function sortPods(arr,k){
+  const m=sortOf(k),a=arr.slice();
+  if(m==='az')a.sort(cmpName);else if(m==='new')a.sort((x,y)=>podLast(y)-podLast(x));else if(m==='recent')a.sort((x,y)=>podHeard(y)-podHeard(x));
+  return a;
+}
+function podRow(p){const l=podLast(p);
+  return `<button class="row lr" data-pod="${esc(p.id)}">${lg({name:p.name||'?',c:hue(p.name||'?')},'',p.art)}<span class="tx"><b>${esc(p.name)}</b><small>${esc(p.author||'Podcast')}</small>${l?`<small>Último episódio: ${esc(fmtDate(l))}</small>`:''}</span></button>`}
+function pickOpt(title,opts,val,cb){
+  $('#pickT').textContent=title;
+  $('#pickL').innerHTML=opts.map(o=>`<button data-o="${o[0]}" class="${o[0]===val?'on':''}">${esc(o[1])}${o[0]===val?' ✓':''}</button>`).join('');
+  const m=$('#pick');m._cb=cb;m.classList.add('open');m.setAttribute('aria-hidden','false');
+}
+function closePick(){const m=$('#pick');m.classList.remove('open');m.setAttribute('aria-hidden','true')}
+document.addEventListener('click',e=>{
+  const so=e.target.closest('[data-sort]');
+  if(so){e.stopPropagation();const k=so.dataset.sort;pickOpt('Ordenar',sortSet(k),sortOf(k),v=>{sorts[k]=v;LS.set('sorts',sorts);renderHome();renderPods()});return}
+  const ly=e.target.closest('[data-lay]');
+  if(ly){e.stopPropagation();const k=ly.dataset.lay;lay[k]=layOf(k)==='list'?'grid':'list';LS.set('lay',lay);renderHome();renderPods();return}
+},true);
 /* ecrã inicial com separadores: uma lista de cada vez */
 let homeTab=LS.get('tab',''),allShown=60;
 function renderHome(){
   const f=[...favs].map(byId).filter(Boolean);
   if(!homeTab)homeTab=f.length?'fav':'main';
   document.querySelectorAll('#homeTabs [data-t]').forEach(b=>{const on=b.dataset.t===homeTab;b.setAttribute('aria-selected',on);b.classList.toggle('on',on)});
-  const el=$('#homeBody');let h='';
-  if(homeTab==='fav')h=f.length?`<div class="grid g4">${f.map(tile).join('')}</div>`:'<p class="msg">Ainda não tens favoritas. Abre uma rádio e toca no coração para ela aparecer aqui.</p>';
-  else if(homeTab==='main')h=`<div class="grid">${main.map(tile).join('')}</div>`;
-  else if(homeTab==='rayo')h=rayo.length?`<div class="grid g4">${rayo.map(tile).join('')}</div>`:'<p class="msg">A carregar canais…</p>';
+  const el=$('#homeBody');let h='';const k=homeTab;
+  $('#radTools').innerHTML=tools(k);
+  const show=arr=>layOf(k)==='list'?arr.map(lrow).join(''):`<div class="grid g4">${arr.map(tile).join('')}</div>`;
+  if(k==='fav'){h=f.length?show(sortSt(f,k)):'<p class="msg">Ainda não tens favoritas. Abre uma rádio e toca no coração para ela aparecer aqui.</p>'}
+  else if(k==='main')h=show(sortSt(main,k));
+  else if(k==='rayo')h=rayo.length?show(sortSt(rayo,k)):'<p class="msg">A carregar canais…</p>';
   else{
-    const pop=all.filter(s=>!s.main&&!s.rayo);
-    h=pop.length?pop.slice(0,allShown).map(row).join('')+(pop.length>allShown?'<button class="more" id="moreAll">Mostrar mais</button>':''):dirLoaded?'<p class="msg">Sem ligação ao diretório de rádios. <button id="retry">Tentar outra vez</button></p>':'<p class="msg">A carregar rádios…</p>';
+    const pop=sortSt(all.filter(s=>!s.main&&!s.rayo),k);
+    h=pop.length?show(pop.slice(0,allShown))+(pop.length>allShown?'<button class="more" id="moreAll">Mostrar mais</button>':''):dirLoaded?'<p class="msg">Sem ligação ao diretório de rádios. <button id="retry">Tentar outra vez</button></p>':'<p class="msg">A carregar rádios…</p>';
   }
   el.innerHTML=h;
 }
@@ -665,6 +729,7 @@ function play(s){
   if(mode==='pod'){if(!audio.paused)pauseEp();mode='radio';audio.removeAttribute('src');paintPlayer()}
   if(cur&&cur.id===s.id){if(audio.paused)start();openNP();return}
   cur=s;ci=0;now={};metaOff=false;LS.set('last',s.id);LS.set('lastT',Date.now());
+  plays[s.id]={n:((plays[s.id]||{}).n||0)+1,t:Date.now()};LS.set('plays',plays);
   paintPlayer();renderAll();start();openNP();
 }
 async function start(){
@@ -1127,10 +1192,11 @@ function renderPods(){
   const cont=Object.entries(epPos).filter(([id,v])=>!v.done&&v.pos>30&&epMeta[id]).sort((a,b)=>b[1].t-a[1].t).slice(0,5);
   let h='';
   if(cont.length)h+='<h2>Continuar a ouvir</h2>'+cont.map(([id])=>epRow(epMeta[id],true)).join('');
-  h+='<h2>Os teus podcasts</h2>'+(subs.length?`<div class="grid g4">${subs.map(podTile).join('')}</div>`:'<p class="msg">Ainda não segues nenhum podcast. Escolhe um do top ou procura acima e toca em Seguir.</p>');
-  h+=`<h2>Top Portugal</h2><div id="podTop">${podTop?`<div class="grid g4">${podTop.map(podTile).join('')}</div>`:'<p class="msg">A carregar…</p>'}</div>`;
+  const pshow=(arr,k)=>layOf(k)==='list'?arr.map(podRow).join(''):`<div class="grid g4">${arr.map(podTile).join('')}</div>`;
+  h+='<h2>Os teus podcasts'+(subs.length?tools('psubs',1):'')+'</h2>'+(subs.length?pshow(sortPods(subs,'psubs'),'psubs'):'<p class="msg">Ainda não segues nenhum podcast. Escolhe um do top ou procura em Procurar e toca em Seguir.</p>');
+  h+=`<h2>Top Portugal${tools('ptop',1)}</h2><div id="podTop">${podTop?pshow(sortPods(podTop,'ptop'),'ptop'):'<p class="msg">A carregar…</p>'}</div>`;
   $('#podBody').innerHTML=h;
-  if(!podTop)loadTop().then(t=>{const el=$('#podTop');if(el)el.innerHTML=t.length?`<div class="grid g4">${t.map(podTile).join('')}</div>`:'<p class="msg">Não consegui carregar o top. Tenta mais tarde.</p>'});
+  if(!podTop)loadTop().then(t=>{const el=$('#podTop');if(el)el.innerHTML=t.length?pshow(sortPods(t,'ptop'),'ptop'):'<p class="msg">Não consegui carregar o top. Tenta mais tarde.</p>'});
 }
 async function searchPods(q){
   $('#podBody').innerHTML='<p class="msg">A procurar…</p>';
@@ -1153,7 +1219,8 @@ async function getPod(id){
   j.episodes.sort((x,y)=>(y.date||0)-(x.date||0));
   j.feed=feed;j.at=Date.now();j.episodes.forEach(e=>{e.podId=id;e.podName=j.name;e.art=e.art||j.art});
   podCache[id]=j;
-  const s=subs.find(x=>x.id===id);if(s&&(!s.feed||!s.art)){s.feed=s.feed||feed;s.art=s.art||j.art;LS.set('pods',subs)}
+  const s=subs.find(x=>x.id===id);const ld=j.episodes[0]&&j.episodes[0].date||0;
+  if(s&&(!s.feed||!s.art||s.last!==ld||!s.author)){s.feed=s.feed||feed;s.art=s.art||j.art;s.last=ld;s.author=s.author||j.author||'';LS.set('pods',subs)}
   return j;
 }
 function openSheet(id){const el=$('#'+id);if(el.classList.contains('open'))return;el.classList.add('open');el.setAttribute('aria-hidden','false');el.scrollTop=0;try{history.pushState({sh:id},'')}catch(e){}}
@@ -1290,6 +1357,7 @@ $('#lyClose').addEventListener('click',()=>closeLyrics());
 $('#ytBtn').addEventListener('click',e=>{e.preventDefault();const a=APPS.find(x=>x.k===LS.get('musicApp',''));if(a&&installedApps().includes(a))openInApp(a);else pickApp()});
 $('#appChg').addEventListener('click',pickApp);
 $('#lyArt').addEventListener('click',togglePreview);
+$('#pick').addEventListener('click',e=>{const b=e.target.closest('[data-o]');const m=$('#pick');if(b){closePick();m._cb&&m._cb(b.dataset.o);return}if(e.target.id==='pick')closePick()});
 $('#apps').addEventListener('click',e=>{const b=e.target.closest('[data-app]');if(b){const a=APPS.find(x=>x.k===b.dataset.app);if($('#appRem').checked)LS.set('musicApp',a.k);closeApps();songLinks();openInApp(a);return}if(e.target.id==='apps')closeApps()});
 
 $('#npFav').addEventListener('click',()=>{
