@@ -54,7 +54,7 @@ class RadioService : MediaLibraryService() {
         val sources = ConcurrentHashMap<String, Src>()
     }
 
-    data class Src(val name: String, val code: String, val triton: String)
+    data class Src(val name: String, val code: String, val triton: String, val logo: String = "")
 
     // ---------- música a tocar, lida pelo próprio serviço (app em segundo plano ou Android Auto) ----------
     private val artCache = ConcurrentHashMap<String, String>()
@@ -275,7 +275,7 @@ class RadioService : MediaLibraryService() {
             .build()
         try {
             val cc = CastContext.getSharedInstance(this)
-            castPlayer = CastPlayer(cc).also { cp ->
+            castPlayer = CastPlayer(cc, CastConverter()).also { cp ->
                 cp.setSessionAvailabilityListener(object : SessionAvailabilityListener {
                     override fun onCastSessionAvailable() {
                         castDevice = cc.sessionManager.currentCastSession?.castDevice?.friendlyName ?: "TV"
@@ -378,7 +378,7 @@ class RadioService : MediaLibraryService() {
         try { startForeground(77, alarmNotification(name)) } catch (e: Exception) {}
         if (o.optLong("snooze", 0L) > 0) { o.remove("snooze") }
         Alarm.fired(this)
-        sources[id] = Src(name, st.optString("code"), st.optString("triton"))
+        sources[id] = Src(name, st.optString("code"), st.optString("triton"), st.optString("logo"))
         // som audível mesmo que o volume esteja quase a zero
         try {
             val am = getSystemService(AudioManager::class.java)
@@ -453,6 +453,24 @@ class RadioService : MediaLibraryService() {
     /** A app no telemóvel diz qual a música a tocar: aparece na notificação e no ecrã do carro. */
     fun updateNow(title: String, artist: String, art: String) {
         val key = "$title|$artist|$art"
+        val cp = castPlayer
+        if (cp != null && active === cp) {
+            // na TV: voltar a enviar a emissão com a música nova (só quando muda)
+            if (key == lastNow) return
+            val item = cp.currentMediaItem ?: return
+            if (item.mediaId.startsWith("ep:")) return
+            val tk = "$title|$artist"
+            if (lastNow.substringBeforeLast('|') == tk && art.isEmpty()) return
+            lastNow = key
+            val st = Stations.find(this, item.mediaId)
+            val name = st?.name ?: (item.mediaMetadata.station?.toString() ?: "")
+            val logo = st?.logo?.ifEmpty { null } ?: sources[item.mediaId]?.logo ?: ""
+            val meta = Stations.metadata(name, logo, title, artist, art)
+            val play = cp.playWhenReady
+            cp.setMediaItem(castable(item.buildUpon().setMediaMetadata(meta).build()))
+            cp.prepare(); cp.playWhenReady = play
+            return
+        }
         if (key == lastNow || player.mediaItemCount == 0 || active !== player) return
         lastNow = key
         val item = player.currentMediaItem ?: return

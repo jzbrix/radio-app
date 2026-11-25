@@ -209,7 +209,7 @@ class MainActivity : ComponentActivity() {
             val logo = o.optString("logo", "")
             val pos = o.optLong("pos", 0L)
             if (!o.optBoolean("podcast", false))
-                RadioService.sources[id] = RadioService.Src(name, o.optString("code", ""), o.optString("triton", ""))
+                RadioService.sources[id] = RadioService.Src(name, o.optString("code", ""), o.optString("triton", ""), logo)
             val meta = if (o.optBoolean("podcast", false))
                 Stations.episodeMeta(name, o.optString("artist", ""), logo)
             else Stations.metadata(name, logo)
