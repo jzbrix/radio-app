@@ -120,7 +120,15 @@ object Stations {
             .setUri(url)
             .setMediaMetadata(meta)
             .setRequestMetadata(rm.build())
-        if (url.contains(".m3u8", ignoreCase = true)) b.setMimeType(MimeTypes.APPLICATION_M3U8)
+        // o tipo é obrigatório para transmitir para a TV (Chromecast)
+        val path = Uri.parse(url).path?.lowercase() ?: ""
+        b.setMimeType(when {
+            url.contains(".m3u8", ignoreCase = true) -> MimeTypes.APPLICATION_M3U8
+            path.endsWith(".m4a") || path.endsWith(".mp4") -> MimeTypes.AUDIO_MP4
+            path.endsWith(".aac") -> MimeTypes.AUDIO_AAC
+            path.endsWith(".ogg") || path.endsWith(".opus") -> MimeTypes.AUDIO_OGG
+            else -> MimeTypes.AUDIO_MPEG
+        })
         return b.build()
     }
 }
