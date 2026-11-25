@@ -1221,7 +1221,7 @@ function fmtDur(x){if(!x)return '';const m=Math.round(x/60);return m>=60?`${Math
 function fmtDate(t){if(!t)return '';const d=new Date(t),days=(Date.now()-t)/864e5;
   return days<1?'Hoje':days<2?'Ontem':days<7?d.toLocaleDateString('pt-PT',{weekday:'long'}):d.toLocaleDateString('pt-PT',{day:'numeric',month:'short',year:d.getFullYear()!==new Date().getFullYear()?'numeric':undefined})}
 async function appleJson(url){let j=null;try{const r=await fetch(url,{signal:AbortSignal.timeout(8000)});j=await r.json()}catch(e){try{j=await jsonp(url)}catch(e2){}}return j}
-async function loadTop(){if(podTop)return podTop;try{const r=await fetch(wk()+'/podtop',{signal:AbortSignal.timeout(20000)});const j=await r.json();podTop=j.items||[]}catch(e){}return podTop||[]}
+async function loadTop(){if(podTop)return podTop;try{const r=await fetch(wk()+'/podtop?limit=100',{signal:AbortSignal.timeout(30000)});const j=await r.json();podTop=j.items||[]}catch(e){}return podTop||[]}
 function epRow(e,showPod){
   const p=epPos[e.id],pct=p&&p.dur?Math.min(100,p.pos/p.dur*100):0,done=p&&p.done;
   const meta=[showPod?e.podName:fmtDate(e.date),done?'Ouvido':p&&p.pos>30&&e.dur?'Faltam '+fmtDur(Math.max(60,(p.dur||e.dur)-p.pos)):fmtDur(e.dur)].filter(Boolean).join(' · ');
@@ -1235,7 +1235,8 @@ function renderPods(){
   if(cont.length)h+='<h2>Continuar a ouvir</h2>'+cont.map(([id])=>epRow(epMeta[id],true)).join('');
   const pshow=(arr,k)=>layOf(k)==='list'?`<div class="rl">${arr.map(p=>podRow(p,canDrag(k)?k:'')).join('')}</div>`:`<div class="grid g4">${arr.map(podTile).join('')}</div>`;
   h+='<h2>Os teus podcasts'+(subs.length?tools('psubs',1):'')+'</h2>'+(subs.length?pshow(sortPods(subs,'psubs'),'psubs'):'<p class="msg">Ainda não segues nenhum podcast. Escolhe um do top ou procura em Procurar e toca em Seguir.</p>');
-  h+=`<h2>Top Portugal${tools('ptop',1)}</h2><div id="podTop">${podTop?pshow(sortPods(podTop,'ptop'),'ptop'):'<p class="msg">A carregar…</p>'}</div>`;
+  h+=`<button class="row lr" data-go="search"><span class="lg" style="--c:var(--s2)"><svg viewBox="0 0 24 24" style="width:26px;height:26px;fill:currentColor"><path d="M10.5 3a7.5 7.5 0 0 1 6 12l4.3 4.3-1.5 1.5-4.3-4.3A7.5 7.5 0 1 1 10.5 3zm0 2.2a5.3 5.3 0 1 0 0 10.6 5.3 5.3 0 0 0 0-10.6z"/></svg></span><span class="tx"><b>Procurar outro podcast</b><small>Qualquer podcast disponível na Apple, pelo nome</small></span></button>`;
+  h+=`<h2>Top 100 Portugal${tools('ptop',1)}</h2><div id="podTop">${podTop?pshow(sortPods(podTop,'ptop'),'ptop'):'<p class="msg">A carregar…</p>'}</div>`;
   $('#podBody').innerHTML=h;
   if(!podTop)loadTop().then(t=>{const el=$('#podTop');if(el)el.innerHTML=t.length?pshow(sortPods(t,'ptop'),'ptop'):'<p class="msg">Não consegui carregar o top. Tenta mais tarde.</p>'});
 }
