@@ -798,10 +798,21 @@ async function itunes(artist,title){
   if(artCache.has(key))return artCache.get(key);
   const term=encodeURIComponent((artist.replace(/,.*$/,'')+' '+title).replace(/\(.*?\)|\[.*?\]|feat\..*$|ft\..*$/gi,'').trim());
   const url=`https://itunes.apple.com/search?term=${term}&media=music&entity=song&limit=1&country=PT`;
-  let j=null;try{const r=await fetch(url,{signal:AbortSignal.timeout(7000)});j=await r.json()}catch(e){try{j=await jsonp(url)}catch(e2){}}
+  let j=null;try{const r=await fetch(url,{signal:AbortSignal.timeout(7000)});if(r.ok)j=await r.json()}catch(e){}
+  if(!j){try{j=await jsonp(url)}catch(e2){}}
   const a=j&&j.results&&j.results[0];
-  const res=a?{art:(a.artworkUrl100||'').replace('100x100bb','600x600bb'),album:a.collectionName||'',year:(a.releaseDate||'').slice(0,4),preview:a.previewUrl||''}:null;
-  artCache.set(key,res);return res;
+  let res=a?{art:(a.artworkUrl100||'').replace('100x100bb','600x600bb'),album:a.collectionName||'',year:(a.releaseDate||'').slice(0,4),preview:a.previewUrl||''}:null;
+  let answered=!!j;
+  // segunda fonte: Deezer (também tem capa e amostra de 30 s)
+  if(!res||!res.art||!res.preview){
+    const dq=encodeURIComponent('artist:"'+artist.replace(/,.*$/,'').replace(/"/g,'')+'" track:"'+title.replace(/\(.*?\)|\[.*?\]/g,'').replace(/"/g,'').trim()+'"');
+    let d=null;try{d=await jsonp('https://api.deezer.com/search?q='+dq+'&limit=1&output=jsonp')}catch(e){}
+    if(d&&!(d.data&&d.data.length)){try{d=await jsonp('https://api.deezer.com/search?q='+term+'&limit=1&output=jsonp')}catch(e){}}
+    const x=d&&d.data&&d.data[0];if(d)answered=true;
+    if(x){res=res||{art:'',album:'',year:'',preview:''};res.art=res.art||(x.album&&(x.album.cover_xl||x.album.cover_big))||'';res.album=res.album||(x.album&&x.album.title)||'';res.preview=res.preview||x.preview||''}
+  }
+  if(res||answered)artCache.set(key,res);
+  return res;
 }
 /* capas para o histórico das rádios sem imagem (poucas de cada vez, para não abusar do serviço) */
 let artBusy=false;
@@ -1071,6 +1082,7 @@ async function getPod(id){
   const feed=await podFeed(id);
   const r=await fetch(wk()+'/pod?id='+id+(feed?'&feed='+encodeURIComponent(feed):''),{signal:AbortSignal.timeout(25000)});
   const j=await r.json();if(j.error)throw new Error(j.error);
+  j.episodes.sort((x,y)=>(y.date||0)-(x.date||0));
   j.feed=feed;j.at=Date.now();j.episodes.forEach(e=>{e.podId=id;e.podName=j.name;e.art=e.art||j.art});
   podCache[id]=j;
   const s=subs.find(x=>x.id===id);if(s&&(!s.feed||!s.art)){s.feed=s.feed||feed;s.art=s.art||j.art;LS.set('pods',subs)}
