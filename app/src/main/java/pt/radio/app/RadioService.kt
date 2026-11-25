@@ -343,38 +343,57 @@ class RadioService : MediaLibraryService() {
 
     // ---------- equalizador ----------
     private var eq: android.media.audiofx.Equalizer? = null
+    private var presetLevels: List<IntArray> = emptyList()
 
     private fun setupEq() {
         try {
             eq?.release()
-            eq = android.media.audiofx.Equalizer(0, player.audioSessionId)
+            val e = android.media.audiofx.Equalizer(0, player.audioSessionId)
+            // forma de cada estilo, lida uma vez com o equalizador desligado
+            e.enabled = false
+            presetLevels = (0 until e.numberOfPresets).map { p ->
+                e.usePreset(p.toShort())
+                IntArray(e.numberOfBands.toInt()) { i -> e.getBandLevel(i.toShort()).toInt() }
+            }
+            eq = e
             applyEq()
         } catch (e: Throwable) { eq = null }
     }
 
+    private fun eqPrefs() = try { org.json.JSONObject(prefs.getString("eq", "{}") ?: "{}") } catch (x: Exception) { org.json.JSONObject() }
+
+    /** Níveis pedidos (estilo ou à mão), sem margem. */
+    private fun wanted(e: android.media.audiofx.Equalizer, o: org.json.JSONObject): IntArray {
+        val n = e.numberOfBands.toInt()
+        val p = o.optInt("preset", -1)
+        if (p >= 0 && p < presetLevels.size) return presetLevels[p].copyOf()
+        val lv = o.optJSONArray("levels")
+        return IntArray(n) { i -> if (lv != null && i < lv.length()) lv.optInt(i) else 0 }
+    }
+
     private fun applyEq() {
         val e = eq ?: return
-        val o = try { org.json.JSONObject(prefs.getString("eq", "{}") ?: "{}") } catch (x: Exception) { org.json.JSONObject() }
+        val o = eqPrefs()
         try {
             val on = o.optBoolean("on", false)
-            e.enabled = on
-            if (!on) return
-            val p = o.optInt("preset", -1)
-            if (p >= 0 && p < e.numberOfPresets) e.usePreset(p.toShort())
-            else {
-                val lv = o.optJSONArray("levels")
-                if (lv != null) for (i in 0 until minOf(lv.length(), e.numberOfBands.toInt())) e.setBandLevel(i.toShort(), lv.getInt(i).toShort())
-            }
+            if (!on) { e.enabled = false; return }
+            val w = wanted(e, o)
+            // baixar tudo pelo maior reforço: evita a distorção (saturação) quando o estilo sobe o volume
+            val head = maxOf(0, w.maxOrNull() ?: 0)
+            val r = e.bandLevelRange
+            for (i in w.indices) e.setBandLevel(i.toShort(), (w[i] - head).coerceIn(r[0].toInt(), r[1].toInt()).toShort())
+            e.enabled = true
         } catch (x: Throwable) {}
     }
 
     fun eqInfo(): String {
         val e = eq ?: return ""
-        val o = try { org.json.JSONObject(prefs.getString("eq", "{}") ?: "{}") } catch (x: Exception) { org.json.JSONObject() }
+        val o = eqPrefs()
         return try {
             val r = e.bandLevelRange
+            val w = wanted(e, o)
             val freqs = org.json.JSONArray(); val levels = org.json.JSONArray(); val presets = org.json.JSONArray()
-            for (i in 0 until e.numberOfBands) { freqs.put(e.getCenterFreq(i.toShort()) / 1000); levels.put(e.getBandLevel(i.toShort()).toInt()) }
+            for (i in 0 until e.numberOfBands) { freqs.put(e.getCenterFreq(i.toShort()) / 1000); levels.put(w[i]) }
             for (i in 0 until e.numberOfPresets) presets.put(e.getPresetName(i.toShort()))
             org.json.JSONObject().put("on", o.optBoolean("on", false)).put("preset", o.optInt("preset", -1))
                 .put("min", r[0].toInt()).put("max", r[1].toInt()).put("freqs", freqs).put("levels", levels).put("presets", presets).toString()
@@ -386,6 +405,7 @@ class RadioService : MediaLibraryService() {
         val o = try { org.json.JSONObject(prefs.getString("eq", "{}") ?: "{}") } catch (x: Exception) { org.json.JSONObject() }
         for (k in n.keys()) o.put(k, n.get(k))
         if (!n.has("preset") && n.optBoolean("on")) { if (!o.has("preset")) o.put("preset", 0) }
+        if (n.has("preset") && n.optInt("preset", -1) < 0 && !n.has("levels")) o.remove("levels")
         prefs.edit().putString("eq", o.toString()).apply()
         ui.post { applyEq() }
     }
