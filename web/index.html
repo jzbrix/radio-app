@@ -43,7 +43,11 @@ svg{width:24px;height:24px;fill:currentColor;flex:none}
 @media(prefers-reduced-motion:reduce){.sheet{transition:none}}
 .shin{max-width:620px;margin:0 auto;padding:calc(8px + var(--st)) 20px calc(40px + var(--sb))}
 #v-pods .hd{display:flex;flex-direction:column;align-items:stretch;gap:10px}
-#pq{width:100%}
+#songsBack{margin-left:-8px}
+.hs{display:flex;gap:12px;overflow-x:auto;margin:0 -16px;padding:0 16px 4px;scrollbar-width:none;scroll-snap-type:x proximity;scroll-padding-inline:16px}.hs::-webkit-scrollbar{display:none}
+.hs .tile{flex:0 0 min(27vw,112px);scroll-snap-align:start}
+.hubrow{display:grid;gap:4px}
+#searchPods h2:first-child,#hub h2:first-child{margin-top:4px}
 #podBody h2{font-size:20px;margin:18px 0 12px}
 .podhead{display:flex;gap:16px;align-items:center;margin:6px 0 14px}
 .podhead .lg{width:120px;height:120px;flex:none;border-radius:14px}
@@ -226,7 +230,12 @@ body.npopen #toast{bottom:auto;top:calc(14px + var(--st))}
 <body>
 
 <section class="view on" id="v-home">
-  <header class="hd"><h1>Rádio</h1></header>
+  <header class="hd"><h1 id="hello">Início</h1></header>
+  <div class="sec" id="hub"></div>
+</section>
+
+<section class="view" id="v-radios">
+  <header class="hd"><h1>Rádios</h1></header>
   <div class="tabs" role="tablist" id="homeTabs">
     <button role="tab" data-t="fav">Favoritas</button><button role="tab" data-t="main">Principais</button><button role="tab" data-t="rayo">Temáticas</button><button role="tab" data-t="all">Todas</button>
   </div>
@@ -234,17 +243,17 @@ body.npopen #toast{bottom:auto;top:calc(14px + var(--st))}
 </section>
 
 <section class="view" id="v-pods">
-  <header class="hd"><h1>Podcasts</h1><input id="pq" type="search" placeholder="Procurar podcasts" autocomplete="off" aria-label="Procurar podcasts"></header>
+  <header class="hd"><h1>Podcasts</h1></header>
   <div class="sec" id="podBody"></div>
 </section>
 
 <section class="view" id="v-search">
-  <header class="hd"><input id="q" type="search" placeholder="Rádio, cidade ou estilo" autocomplete="off" aria-label="Procurar"></header>
-  <div class="sec"><div id="searchList"></div></div>
+  <header class="hd"><input id="q" type="search" placeholder="Rádios ou podcasts" autocomplete="off" aria-label="Procurar"></header>
+  <div class="sec"><div id="searchPods"></div><div id="searchList"></div></div>
 </section>
 
 <section class="view" id="v-songs">
-  <header class="hd"><h1>Músicas</h1></header>
+  <header class="hd"><button class="ib" id="songsBack" aria-label="Voltar"><svg viewBox="0 0 24 24"><path d="M15.4 6.4 14 5l-7 7 7 7 1.4-1.4L9.8 12z"/></svg></button><h1>Histórico</h1></header>
   <div class="sec"><div id="songList"></div></div>
 </section>
 
@@ -255,9 +264,9 @@ body.npopen #toast{bottom:auto;top:calc(14px + var(--st))}
 
 <nav id="nav">
   <button data-v="home" aria-current="page"><svg viewBox="0 0 24 24"><path d="M12 3 3 10.5V21h6v-6h6v6h6V10.5z"/></svg>Início</button>
+  <button data-v="radios"><svg viewBox="0 0 24 24"><path d="M20 6H8.3l8.3-3.4-.7-1.8L3.2 6.1A2 2 0 0 0 2 8v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zM7 20a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm13-8h-2v-2h-2v2H4V8h16z"/></svg>Rádios</button>
   <button data-v="pods"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 2.6 1.4 4.8 3.5 6l.6-1.8A5 5 0 1 1 15 13.2l.6 1.8A7 7 0 0 0 12 2zm0 4a3 3 0 0 0-1.6 5.5L11 22h2l.6-10.5A3 3 0 0 0 12 6z"/></svg>Podcasts</button>
   <button data-v="search"><svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 6 12l4.3 4.3-1.5 1.5-4.3-4.3A7.5 7.5 0 1 1 10.5 3zm0 2.2a5.3 5.3 0 1 0 0 10.6 5.3 5.3 0 0 0 0-10.6z"/></svg>Procurar</button>
-  <button data-v="songs"><svg viewBox="0 0 24 24"><path d="M9 3v11.3A3.5 3.5 0 1 0 11 17.5V8h8V3z"/></svg>Músicas</button>
 </nav>
 
 <div id="np" aria-hidden="true" role="dialog" aria-label="A tocar">
@@ -540,7 +549,7 @@ const eq='<span class="eq"><b></b><b></b><b></b></span>';
 function tile(s){const on=cur&&cur.id===s.id;return `<button class="tile${on?' on':''}" data-id="${esc(s.id)}">${lg(s).replace('</span>',(on?eq:'')+'</span>')}<span>${esc(s.name)}</span></button>`}
 function row(s){const on=cur&&cur.id===s.id;return `<button class="row${on?' on':''}" data-id="${esc(s.id)}">${lg(s).replace('</span>',(on?eq:'')+'</span>')}<span class="tx"><b>${esc(s.name)}</b><small>${on&&now.title?esc(now.artist+' – '+now.title):esc(sub(s))}</small></span></button>`}
 function renderAll(){
-  renderHome();
+  renderHome();if(view==='home')renderHub();
   renderSearch();renderSongs();
   document.body.classList.toggle('paused',audio.paused);
   pushStations();
@@ -561,10 +570,68 @@ function renderHome(){
   }
   el.innerHTML=h;
 }
+/* ---------- Início: um resumo de tudo ---------- */
+let hubEps=null,hubEpsAt=0,hubBusy=false;
+function hello(){const h=new Date().getHours();return h<6?'Boa noite':h<13?'Bom dia':h<20?'Boa tarde':'Boa noite'}
+function renderHub(){
+  const el=$('#hub');if(!el)return;$('#hello').textContent=hello();
+  let h='';
+  // continuar
+  const cont=[];
+  const lastSt=cur||byId(LS.get('last',''));
+  const le=epMeta[LS.get('lastEp','')],lp=le&&epPos[le.id];
+  const epFirst=le&&lp&&!lp.done&&lp.pos>30&&(mode==='pod'||(lp.t||0)>(LS.get('lastT',0)||0));
+  if(le&&lp&&!lp.done&&lp.pos>30&&epFirst)cont.push(epRow(le,true));
+  if(lastSt)cont.push(row(lastSt));
+  if(le&&lp&&!lp.done&&lp.pos>30&&!epFirst)cont.push(epRow(le,true));
+  if(cont.length)h+='<h2>Continuar</h2><div class="hubrow">'+cont.join('')+'</div>';
+  // rádios
+  const f=[...favs].map(byId).filter(Boolean);
+  h+=`<h2>${f.length?'As tuas rádios':'Rádios principais'}<button data-go="radios">Ver todas</button></h2><div class="hs">${(f.length?f:main).map(tile).join('')}</div>`;
+  // podcasts
+  if(subs.length){
+    h+='<h2>Novos episódios<button data-go="pods">Podcasts</button></h2><div id="hubEps">'+(hubEps?hubEpsHtml():'<p class="msg">A carregar…</p>')+'</div>';
+  }else{
+    h+='<h2>Descobre podcasts<button data-go="pods">Ver top</button></h2><div class="hs" id="hubTop">'+(podTop?podTop.slice(0,12).map(podTile).join(''):'')+'</div>';
+  }
+  // músicas
+  if(hist.length)h+='<h2>Tocou há pouco<button data-go="songs">Histórico</button></h2>'+hist.slice(0,5).map(x=>songRow(x,true)).join('');
+  const keep=[...el.querySelectorAll('.hs')].map(x=>x.scrollLeft);
+  el.innerHTML=h;
+  el.querySelectorAll('.hs').forEach((x,i)=>{if(keep[i])x.scrollLeft=keep[i]});
+  if(subs.length&&(!hubEps||Date.now()-hubEpsAt>15*60e3))loadHubEps();
+  if(!subs.length&&!podTop)loadTop().then(t=>{const x=$('#hubTop');if(x)x.innerHTML=t.slice(0,12).map(podTile).join('')});
+}
+function hubEpsHtml(){
+  const l=(hubEps||[]).filter(e=>!(epPos[e.id]&&epPos[e.id].done)).slice(0,6);
+  return l.length?l.map(e=>epRow(e,true)).join(''):'<p class="msg">Sem episódios novos nas últimas duas semanas.</p>';
+}
+async function loadHubEps(){
+  if(hubBusy)return;hubBusy=true;
+  const out=[];
+  await Promise.all(subs.slice(0,12).map(async p=>{try{const j=await getPod(p.id);out.push(...j.episodes.slice(0,3))}catch(e){}}));
+  const lim=Date.now()-14*864e5;
+  hubEps=out.filter(e=>(e.date||0)>lim).sort((a,b)=>b.date-a.date);hubEpsAt=Date.now();hubBusy=false;
+  const x=$('#hubEps');if(x)x.innerHTML=hubEpsHtml();
+}
+/* ---------- procurar: rádios e podcasts juntos ---------- */
+let podFound={},sq=0;
 function renderSearch(){
   const qq=norm(q);
   const arr=all.filter(s=>!qq||norm(s.name+' '+(s.tags||[]).join(' ')+' '+s.state).includes(qq));
-  $('#searchList').innerHTML=arr.length?arr.slice(0,400).map(row).join(''):'<p class="msg">Nenhuma rádio encontrada.</p>';
+  $('#searchList').innerHTML=(qq?'<h2>Rádios</h2>':'')+(arr.length?arr.slice(0,qq?60:400).map(row).join(''):'<p class="msg">Nenhuma rádio encontrada.</p>');
+}
+async function searchAllPods(){
+  const term=q.trim(),my=++sq,el=$('#searchPods');
+  if(term.length<3){el.innerHTML='';return}
+  const local=subs.filter(p=>norm(p.name).includes(norm(term)));
+  el.innerHTML='<h2>Podcasts</h2><p class="msg">A procurar…</p>';
+  const j=await appleJson(`https://itunes.apple.com/search?media=podcast&entity=podcast&country=PT&limit=12&term=${encodeURIComponent(term)}`);
+  if(my!==sq)return;
+  const items=((j&&j.results)||[]).map(x=>({id:String(x.collectionId),name:x.collectionName,author:x.artistName,art:x.artworkUrl600||x.artworkUrl100||'',feed:x.feedUrl||''}));
+  items.forEach(x=>{if(x.feed)feedCache[x.id]=x.feed;podFound[x.id]=x});
+  const ids=new Set(local.map(x=>x.id));const l=[...local,...items.filter(x=>!ids.has(x.id))];
+  el.innerHTML=l.length?'<h2>Podcasts</h2><div class="hs">'+l.map(podTile).join('')+'</div>':'';
 }
 function songRow(h,showSt){
   const st={name:h.title||h.t||'?',c:hue(h.st||'')},tm=rel(h.at),day='';
@@ -577,8 +644,9 @@ function renderSongs(){
 }
 function setView(v){
   view=v;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));
-  document.querySelectorAll('#nav button').forEach(b=>b.setAttribute('aria-current',b.dataset.v===v?'page':'false'));
-  window.scrollTo(0,0);if(v==='search')setTimeout(()=>$('#q').focus(),50);if(v==='pods')renderPods();
+  const nv=v==='songs'?'home':v;
+  document.querySelectorAll('#nav button').forEach(b=>b.setAttribute('aria-current',b.dataset.v===nv?'page':'false'));
+  window.scrollTo(0,0);if(v==='search')setTimeout(()=>$('#q').focus(),50);if(v==='pods')renderPods();if(v==='home')renderHub();
 }
 
 /* ---------- leitor ---------- */
@@ -596,7 +664,7 @@ function killHls(){if(hls){try{hls.destroy()}catch(e){}hls=null}}
 function play(s){
   if(mode==='pod'){if(!audio.paused)pauseEp();mode='radio';audio.removeAttribute('src');paintPlayer()}
   if(cur&&cur.id===s.id){if(audio.paused)start();openNP();return}
-  cur=s;ci=0;now={};metaOff=false;LS.set('last',s.id);
+  cur=s;ci=0;now={};metaOff=false;LS.set('last',s.id);LS.set('lastT',Date.now());
   paintPlayer();renderAll();start();openNP();
 }
 async function start(){
@@ -1145,7 +1213,7 @@ function paintEp(){
   $('#epPlay').innerHTML=IC[audio.paused?'play':'pause'];
   paintEpTime();
   if($('#pod').classList.contains('open'))paintPodEps();
-  if(view==='pods')renderPods();
+  if(view==='pods')renderPods();if(view==='home'){const x=$('#hubEps');if(x)x.innerHTML=hubEpsHtml()}
 }
 function paintEpTime(){
   if(!ep)return;const d=(audio.duration>0?audio.duration:0)||ep.dur||(epPos[ep.id]||{}).dur||0;
@@ -1155,15 +1223,15 @@ function paintEpTime(){
 }
 function openEp(){paintEp();openSheet('ep')}
 function initPods(){
-  $('#podBody').addEventListener('click',e=>{const t=e.target.closest('[data-pod]');if(t){openPod(t.dataset.pod,[...subs,...(podTop||[])].find(x=>x.id===t.dataset.pod));return}
-    const r=e.target.closest('[data-ep]');if(r){const x=findEp(r.dataset.ep);if(x){if(mode==='pod'&&ep&&ep.id===x.id)toggle();else playEp(x)}}});
+  const podClick=e=>{const t=e.target.closest('[data-pod]');if(t){openPod(t.dataset.pod,[...subs,...(podTop||[])].find(x=>x.id===t.dataset.pod)||podFound[t.dataset.pod]);return}
+    const r=e.target.closest('[data-ep]');if(r){const x=findEp(r.dataset.ep);if(x){if(mode==='pod'&&ep&&ep.id===x.id)toggle();else playEp(x)}}};
+  ['#podBody','#hub','#searchPods'].forEach(k=>$(k).addEventListener('click',podClick));
   $('#podEps').addEventListener('click',e=>{if(e.target.closest('#moreEps')){podShown+=40;paintPodEps();return}
     const r=e.target.closest('[data-ep]');if(!r)return;const x=findEp(r.dataset.ep);if(!x)return;
     if(mode==='pod'&&ep&&ep.id===x.id){if(e.target.closest('.pl'))toggle();else openEp()}else playEp(x)});
   $('#podHead').addEventListener('click',e=>{const b=e.target.closest('#podFollow');if(!b)return;const h=b._h;const i=subs.findIndex(x=>x.id===h.id);
     if(i>=0){subs.splice(i,1);toast('Deixaste de seguir')}else{const p=podCache[h.id];subs.unshift({id:h.id,name:h.name||(p&&p.name)||'',author:h.author||'',art:h.art||(p&&p.art)||'',feed:feedCache[h.id]||(p&&p.feed)||''});toast('A seguir '+(h.name||''))}
     LS.set('pods',subs);paintPodHead(h);lastStations='';pushStations()});
-  let pt;$('#pq').addEventListener('input',e=>{clearTimeout(pt);pt=setTimeout(()=>{podQ=e.target.value.trim();podQ.length>=2?searchPods(podQ):renderPods()},400)});
   $('#podClose').addEventListener('click',()=>closeSheet('pod'));
   $('#epClose').addEventListener('click',()=>closeSheet('ep'));
   $('#epPodLink').addEventListener('click',()=>{if(ep&&ep.podId){closeSheet('ep');setTimeout(()=>openPod(ep.podId),320)}});
@@ -1207,7 +1275,9 @@ document.addEventListener('click',e=>{
 $('#nav').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)setView(b.dataset.v)});
 $('#homeTabs').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;homeTab=b.dataset.t;LS.set('tab',homeTab);allShown=60;renderHome();window.scrollTo({top:0})});
 $('#homeBody').addEventListener('click',e=>{if(e.target.closest('#moreAll')){allShown+=60;renderHome()}});
-let qt;$('#q').addEventListener('input',e=>{clearTimeout(qt);qt=setTimeout(()=>{q=e.target.value;renderSearch()},120)});
+let qt,qpt;$('#q').addEventListener('input',e=>{clearTimeout(qt);clearTimeout(qpt);qt=setTimeout(()=>{q=e.target.value;renderSearch()},120);qpt=setTimeout(searchAllPods,450)});
+$('#songsBack').addEventListener('click',()=>setView('home'));
+document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)setView(g.dataset.go)});
 $('#miniOpen').addEventListener('click',()=>mode==='pod'?openEp():openNP());
 $('#miniPlay').addEventListener('click',toggle);
 $('#npPlay').addEventListener('click',toggle);
