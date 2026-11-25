@@ -51,6 +51,9 @@ svg{width:24px;height:24px;fill:currentColor;flex:none}
 .row.lr{align-items:center;padding:10px 0;border-bottom:1px solid var(--line,rgba(255,255,255,.06));border-radius:0}
 .row.lr .lg{width:56px;height:56px}.row.lr small.np{color:var(--acc2)}
 #pick .lst button.on{color:var(--acc2)}
+.rl{position:relative}.dh{flex:none;display:grid;place-items:center;width:44px;height:52px;margin-right:-8px;color:var(--mut);touch-action:none;cursor:grab}.dh svg{width:24px;height:24px;fill:currentColor}
+.row.dragging{position:relative;z-index:3;background:var(--s1);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);transition:none}
+body.drag{user-select:none;-webkit-user-select:none}
 .hs{display:flex;gap:12px;overflow-x:auto;margin:0 -16px;padding:0 16px 4px;scrollbar-width:none;scroll-snap-type:x proximity;scroll-padding-inline:16px}.hs::-webkit-scrollbar{display:none}
 .hs .tile{flex:0 0 min(27vw,112px);scroll-snap-align:start}
 .hubrow{display:grid;gap:4px}
@@ -570,27 +573,30 @@ function desc(s){
   if(s.rayo){const br=(s.name.match(/^(M80|Comercial|Cidade|Smooth|Rádio Comercial)/i)||[])[1];const g=br?s.name.slice(br.length).trim():'';return 'Canal temático'+(br?' da '+br.replace(/^Rádio /,''):'')+(g?' · '+g:'')}
   const t=(s.tags||[]).slice(0,3).join(' · ');return [t,s.state].filter(Boolean).join(' · ')||'Rádio portuguesa';
 }
-function lrow(s){const on=cur&&cur.id===s.id,np=on&&now.title?now.artist+' – '+now.title:npLine(s);
-  return `<button class="row lr${on?' on':''}" data-id="${esc(s.id)}">${lg(s).replace('</span>',(on?eq:'')+'</span>')}<span class="tx"><b>${esc(s.name)}</b><small>${esc(desc(s))}</small>${np?`<small class="np">${esc(np)}</small>`:''}</span></button>`}
-let lay=LS.get('lay',{}),sorts=LS.get('sorts',{}),plays=LS.get('plays',{});
+const IC_DRAG='<svg viewBox="0 0 24 24"><path d="M4 8h16v2H4zm0 6h16v2H4z"/></svg>';
+const canDrag=k=>['fav','main','rayo','psubs'].includes(k)&&sortOf(k)==='def'&&layOf(k)==='list';
+function lrow(s,dk){const on=cur&&cur.id===s.id,np=on&&now.title?now.artist+' – '+now.title:npLine(s);
+  return `<button class="row lr${on?' on':''}" data-id="${esc(s.id)}">${lg(s).replace('</span>',(on?eq:'')+'</span>')}<span class="tx"><b>${esc(s.name)}</b><small>${esc(desc(s))}</small>${np?`<small class="np">${esc(np)}</small>`:''}</span>${dk?`<span class="dh" data-drag="${dk}" aria-label="Arrastar para mudar a ordem">${IC_DRAG}</span>`:''}</button>`}
+let lay=LS.get('lay',{}),sorts=LS.get('sorts',{}),plays=LS.get('plays',{}),order=LS.get('order',{});
 const IC_LIST='<svg viewBox="0 0 24 24"><path d="M3 5h4v4H3zm6 1h12v2H9zM3 10h4v4H3zm6 1h12v2H9zM3 15h4v4H3zm6 1h12v2H9z"/></svg>',IC_GRID='<svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>',IC_SORT='<svg viewBox="0 0 24 24"><path d="M3 6h18v2H3zm3 5h12v2H6zm4 5h4v2h-4z"/></svg>';
 const SORTS={
-  radio:[['def','Predefinida'],['az','Nome (A–Z)'],['plays','Mais ouvidas'],['recent','Ouvidas há pouco']],
-  fav:[['def','Ordem em que adicionaste'],['az','Nome (A–Z)'],['plays','Mais ouvidas'],['recent','Ouvidas há pouco']],
-  psubs:[['def','Ordem em que seguiste'],['az','Nome (A–Z)'],['new','Episódio mais recente'],['recent','Ouvidos há pouco']],
+  radio:[['def','A minha ordem (arrastar)'],['az','Nome (A–Z)'],['plays','Mais ouvidas'],['recent','Ouvidas há pouco']],
+  fav:[['def','A minha ordem (arrastar)'],['az','Nome (A–Z)'],['plays','Mais ouvidas'],['recent','Ouvidas há pouco']],
+  psubs:[['def','A minha ordem (arrastar)'],['az','Nome (A–Z)'],['new','Episódio mais recente'],['recent','Ouvidos há pouco']],
   ptop:[['def','Posição no top'],['az','Nome (A–Z)']]
 };
 const sortSet=k=>SORTS[k==='fav'||k==='psubs'||k==='ptop'?k:'radio'];
 const layOf=k=>lay[k]||'list',sortOf=k=>sorts[k]||'def';
 function tools(k,inH2){
   const o=sortSet(k).find(x=>x[0]===sortOf(k))||sortSet(k)[0];
-  const SH={def:k==='fav'?'Por adição':k==='psubs'?'Seguidos':k==='ptop'?'Posição no top':'Predefinida',az:'A–Z',plays:'Mais ouvidas',recent:'Recentes',new:'Novidades'};
+  const SH={def:k==='ptop'?'Posição no top':'A minha ordem',az:'A–Z',plays:'Mais ouvidas',recent:'Recentes',new:'Novidades'};
   return `<span class="tools"${inH2?'':' style="display:contents"'}><button class="srt" data-sort="${k}">${IC_SORT}${esc(inH2?SH[o[0]]:o[1])}</button><button data-lay="${k}" aria-label="${layOf(k)==='list'?'Ver em grelha':'Ver em lista'}">${layOf(k)==='list'?IC_GRID:IC_LIST}</button></span>`;
 }
 const cmpName=(a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt',{sensitivity:'base'});
 function sortSt(arr,k){
   const m=sortOf(k),a=arr.slice();
-  if(m==='az')a.sort(cmpName);
+  if(m==='def'&&order[k]){const ix=new Map(order[k].map((id,i)=>[id,i]));a.sort((x,y)=>(ix.has(x.id)?ix.get(x.id):1e6)-(ix.has(y.id)?ix.get(y.id):1e6))}
+  else if(m==='az')a.sort(cmpName);
   else if(m==='plays')a.sort((x,y)=>((plays[y.id]||{}).n||0)-((plays[x.id]||{}).n||0));
   else if(m==='recent')a.sort((x,y)=>((plays[y.id]||{}).t||0)-((plays[x.id]||{}).t||0));
   return a;
@@ -602,8 +608,8 @@ function sortPods(arr,k){
   if(m==='az')a.sort(cmpName);else if(m==='new')a.sort((x,y)=>podLast(y)-podLast(x));else if(m==='recent')a.sort((x,y)=>podHeard(y)-podHeard(x));
   return a;
 }
-function podRow(p){const l=podLast(p);
-  return `<button class="row lr" data-pod="${esc(p.id)}">${lg({name:p.name||'?',c:hue(p.name||'?')},'',p.art)}<span class="tx"><b>${esc(p.name)}</b><small>${esc(p.author||'Podcast')}</small>${l?`<small>Último episódio: ${esc(fmtDate(l))}</small>`:''}</span></button>`}
+function podRow(p,dk){const l=podLast(p);
+  return `<button class="row lr" data-pod="${esc(p.id)}">${lg({name:p.name||'?',c:hue(p.name||'?')},'',p.art)}<span class="tx"><b>${esc(p.name)}</b><small>${esc(p.author||'Podcast')}</small>${l?`<small>Último episódio: ${esc(fmtDate(l))}</small>`:''}</span>${dk?`<span class="dh" data-drag="${dk}" aria-label="Arrastar para mudar a ordem">${IC_DRAG}</span>`:''}</button>`}
 function pickOpt(title,opts,val,cb){
   $('#pickT').textContent=title;
   $('#pickL').innerHTML=opts.map(o=>`<button data-o="${o[0]}" class="${o[0]===val?'on':''}">${esc(o[1])}${o[0]===val?' ✓':''}</button>`).join('');
@@ -616,6 +622,40 @@ document.addEventListener('click',e=>{
   const ly=e.target.closest('[data-lay]');
   if(ly){e.stopPropagation();const k=ly.dataset.lay;lay[k]=layOf(k)==='list'?'grid':'list';LS.set('lay',lay);renderHome();renderPods();return}
 },true);
+/* arrastar para mudar a ordem */
+let drag=null,noClick=0;
+function saveOrder(k,ids){
+  if(k==='fav'){favs=new Set([...ids,...[...favs].filter(x=>!ids.includes(x))]);LS.set('favs',[...favs])}
+  else if(k==='psubs'){const ix=new Map(ids.map((id,i)=>[id,i]));subs.sort((a,b)=>(ix.has(a.id)?ix.get(a.id):1e6)-(ix.has(b.id)?ix.get(b.id):1e6));LS.set('pods',subs)}
+  else{order[k]=ids;LS.set('order',order)}
+  if(typeof lastStations!=='undefined')lastStations='';pushStations();
+}
+document.addEventListener('pointerdown',e=>{
+  const h=e.target.closest('[data-drag]');if(!h)return;
+  e.preventDefault();const item=h.closest('.row');
+  drag={item,box:item.parentElement,k:h.dataset.drag,y0:e.clientY+scrollY,id:e.pointerId};
+  item.classList.add('dragging');document.body.classList.add('drag');
+  try{h.setPointerCapture(e.pointerId)}catch(x){}
+  if(navigator.vibrate)try{navigator.vibrate(15)}catch(x){}
+});
+document.addEventListener('pointermove',e=>{
+  if(!drag||e.pointerId!==drag.id)return;e.preventDefault();
+  if(e.clientY<110)scrollBy(0,-10);else if(e.clientY>innerHeight-190)scrollBy(0,10);
+  const it=drag.item,py=e.clientY+scrollY;
+  it.style.transform=`translateY(${py-drag.y0}px)`;
+  const r=it.getBoundingClientRect(),mid=r.top+r.height/2;
+  const nx=it.nextElementSibling,pv=it.previousElementSibling;
+  if(nx&&nx.classList.contains('row')){const b=nx.getBoundingClientRect();if(mid>b.top+b.height/2){drag.box.insertBefore(nx,it);drag.y0+=b.height;it.style.transform=`translateY(${py-drag.y0}px)`}}
+  if(pv&&pv.classList.contains('row')){const b=pv.getBoundingClientRect();if(mid<b.top+b.height/2){drag.box.insertBefore(it,pv);drag.y0-=b.height;it.style.transform=`translateY(${py-drag.y0}px)`}}
+},{passive:false});
+function endDrag(){
+  if(!drag)return;const {item,box,k}=drag;drag=null;
+  item.style.transform='';item.classList.remove('dragging');document.body.classList.remove('drag');
+  noClick=Date.now();
+  saveOrder(k,[...box.querySelectorAll(':scope > .row')].map(x=>x.dataset.id||x.dataset.pod));
+}
+document.addEventListener('pointerup',endDrag);document.addEventListener('pointercancel',endDrag);
+document.addEventListener('click',e=>{if(e.target.closest('[data-drag]')||Date.now()-noClick<150){e.stopPropagation();e.preventDefault()}},true);
 /* ecrã inicial com separadores: uma lista de cada vez */
 let homeTab=LS.get('tab',''),allShown=60;
 function renderHome(){
@@ -624,7 +664,8 @@ function renderHome(){
   document.querySelectorAll('#homeTabs [data-t]').forEach(b=>{const on=b.dataset.t===homeTab;b.setAttribute('aria-selected',on);b.classList.toggle('on',on)});
   const el=$('#homeBody');let h='';const k=homeTab;
   $('#radTools').innerHTML=tools(k);
-  const show=arr=>layOf(k)==='list'?arr.map(lrow).join(''):`<div class="grid g4">${arr.map(tile).join('')}</div>`;
+  const dk=canDrag(k)?k:'';
+  const show=arr=>layOf(k)==='list'?`<div class="rl">${arr.map(s=>lrow(s,dk)).join('')}</div>`:`<div class="grid g4">${arr.map(tile).join('')}</div>`;
   if(k==='fav'){h=f.length?show(sortSt(f,k)):'<p class="msg">Ainda não tens favoritas. Abre uma rádio e toca no coração para ela aparecer aqui.</p>'}
   else if(k==='main')h=show(sortSt(main,k));
   else if(k==='rayo')h=rayo.length?show(sortSt(rayo,k)):'<p class="msg">A carregar canais…</p>';
@@ -1192,7 +1233,7 @@ function renderPods(){
   const cont=Object.entries(epPos).filter(([id,v])=>!v.done&&v.pos>30&&epMeta[id]).sort((a,b)=>b[1].t-a[1].t).slice(0,5);
   let h='';
   if(cont.length)h+='<h2>Continuar a ouvir</h2>'+cont.map(([id])=>epRow(epMeta[id],true)).join('');
-  const pshow=(arr,k)=>layOf(k)==='list'?arr.map(podRow).join(''):`<div class="grid g4">${arr.map(podTile).join('')}</div>`;
+  const pshow=(arr,k)=>layOf(k)==='list'?`<div class="rl">${arr.map(p=>podRow(p,canDrag(k)?k:'')).join('')}</div>`:`<div class="grid g4">${arr.map(podTile).join('')}</div>`;
   h+='<h2>Os teus podcasts'+(subs.length?tools('psubs',1):'')+'</h2>'+(subs.length?pshow(sortPods(subs,'psubs'),'psubs'):'<p class="msg">Ainda não segues nenhum podcast. Escolhe um do top ou procura em Procurar e toca em Seguir.</p>');
   h+=`<h2>Top Portugal${tools('ptop',1)}</h2><div id="podTop">${podTop?pshow(sortPods(podTop,'ptop'),'ptop'):'<p class="msg">A carregar…</p>'}</div>`;
   $('#podBody').innerHTML=h;
