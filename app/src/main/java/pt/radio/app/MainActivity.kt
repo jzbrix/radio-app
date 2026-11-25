@@ -191,6 +191,28 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
+        fun apps(json: String): String {
+            val arr = org.json.JSONArray(json)
+            val out = org.json.JSONArray()
+            for (i in 0 until arr.length()) {
+                val pkg = arr.getString(i)
+                try { packageManager.getPackageInfo(pkg, 0); out.put(pkg) } catch (e: Exception) {}
+            }
+            return out.toString()
+        }
+
+        @JavascriptInterface
+        fun openIn(pkg: String, url: String) {
+            runOnUiThread {
+                val uri = android.net.Uri.parse(url)
+                val i = Intent(Intent.ACTION_VIEW, uri).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try { startActivity(i) } catch (e: Exception) {
+                    try { startActivity(packageManager.getLaunchIntentForPackage(pkg) ?: Intent(Intent.ACTION_VIEW, uri)) } catch (e2: Exception) {}
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun pause() {
             withController { c -> c.pause() }
         }
