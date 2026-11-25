@@ -23,11 +23,11 @@ TYPE   system-ui, títulos pesados e compactos
 html{background:#0f0e1c}html,body{margin:0;color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:clip}
 body{background:transparent}
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:
-  radial-gradient(110% 55% at 0% 0%,rgba(124,58,237,.38) 0%,transparent 62%),
-  radial-gradient(90% 50% at 100% 22%,rgba(14,116,144,.32) 0%,transparent 60%),
-  radial-gradient(110% 55% at 15% 100%,rgba(219,39,119,.26) 0%,transparent 62%),
-  radial-gradient(80% 45% at 100% 85%,rgba(255,77,61,.18) 0%,transparent 60%),
-  linear-gradient(180deg,#141030 0%,#0f0e1c 55%,#120c1c 100%)}
+  radial-gradient(110% 55% at 0% 0%,var(--g1,rgba(124,58,237,.38)) 0%,transparent 62%),
+  radial-gradient(90% 50% at 100% 22%,var(--g2,rgba(14,116,144,.32)) 0%,transparent 60%),
+  radial-gradient(110% 55% at 15% 100%,var(--g3,rgba(219,39,119,.26)) 0%,transparent 62%),
+  radial-gradient(80% 45% at 100% 85%,var(--g4,rgba(255,77,61,.18)) 0%,transparent 60%),
+  linear-gradient(180deg,var(--gt,#141030) 0%,#0f0e1c 55%,var(--gb,#120c1c) 100%)}
 body{padding-bottom:calc(var(--nav) + var(--mini) + var(--sb) + 16px)}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
 button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
@@ -475,6 +475,7 @@ function nativeAudio(){
     try{if(mode==='pod'&&NATIVE.pause)NATIVE.pause();else{NATIVE.stop();sent=''}}catch(e){}
     if(was)a.dispatchEvent(new Event('pause'))};
   window.__native=(ev,arg)=>{
+    if(ev==='colors'){wallColors();return}
     if(ev==='time'){const [p,q]=String(arg).split(',').map(Number);t=(p||0)/1000;d=q>0?q/1000:NaN;a.dispatchEvent(new Event('timeupdate'));return}
     if(ev==='playing')a.paused=false;
     if(ev==='pause'){if(a.paused)return;a.paused=true}
@@ -486,7 +487,19 @@ function nativeAudio(){
   };
   return a;
 }
-const audio=NATIVE?nativeAudio():new Audio();audio.preload='none';
+/* gradientes com as cores do papel de parede (Android 12 ou mais recente) */
+function wallColors(){
+  let c=null;try{c=NATIVE&&NATIVE.colors&&JSON.parse(NATIVE.colors()||'null')}catch(e){}
+  const r=document.documentElement.style;
+  if(!c||!c.a1||LS.get('wall',true)===false){['--g1','--g2','--g3','--g4','--gt','--gb'].forEach(k=>r.removeProperty(k));return}
+  const rgba=(h,a)=>{const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`};
+  const mix=(h,a)=>{const n=parseInt(h.slice(1),16),k=a,b=[15,14,28];return `rgb(${Math.round((n>>16&255)*k+b[0]*(1-k))},${Math.round((n>>8&255)*k+b[1]*(1-k))},${Math.round((n&255)*k+b[2]*(1-k))})`};
+  r.setProperty('--g1',rgba(c.a1,.42));r.setProperty('--g2',rgba(c.a3,.32));r.setProperty('--g3',rgba(c.a2,.30));r.setProperty('--g4',rgba(c.a1d||c.a1,.22));
+  r.setProperty('--gt',mix(c.a1d||c.a1,.22));r.setProperty('--gb',mix(c.a2,.12));
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.content=mix(c.a1d||c.a1,.22);
+}
+const audio=NATIVE?nativeAudio():new Audio();
+wallColors();audio.preload='none';
 let lastStations='';
 function pushStations(){
   if(!NATIVE)return;

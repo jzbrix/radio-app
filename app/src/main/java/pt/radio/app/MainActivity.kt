@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         RadioService.appVisible = true
+        emit("colors")
     }
 
     override fun onStop() {
@@ -224,6 +225,20 @@ class MainActivity : ComponentActivity() {
                     try { startActivity(packageManager.getLaunchIntentForPackage(pkg) ?: Intent(Intent.ACTION_VIEW, uri)) } catch (e2: Exception) {}
                 }
             }
+        }
+
+        /** Cores do tema do sistema (Android 12+), tiradas do papel de parede. */
+        @JavascriptInterface
+        fun colors(): String {
+            if (android.os.Build.VERSION.SDK_INT < 31) return ""
+            fun hex(id: Int) = String.format("#%06X", 0xFFFFFF and getColor(id))
+            val o = JSONObject()
+            o.put("a1", hex(android.R.color.system_accent1_400))
+            o.put("a2", hex(android.R.color.system_accent2_400))
+            o.put("a3", hex(android.R.color.system_accent3_400))
+            o.put("a1d", hex(android.R.color.system_accent1_700))
+            o.put("n", hex(android.R.color.system_neutral1_900))
+            return o.toString()
         }
 
         @JavascriptInterface
