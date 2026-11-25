@@ -182,6 +182,7 @@ body.drag{user-select:none;-webkit-user-select:none}
 .acts.rnd .ci{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.1);transition:background .15s}
 .acts.rnd>*:active .ci{background:rgba(255,255,255,.2)}
 .acts.rnd .hot{color:var(--acc2)}.acts.rnd .hot .ci{background:color-mix(in srgb,var(--acc) 30%,transparent)}
+.acts.rnd .ci b{font-size:14px;font-weight:800;letter-spacing:-.02em}
 .acts.rnd svg{width:26px;height:26px;fill:currentColor}
 .bs{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:none;align-items:flex-end}.bs.open{display:flex}
 .bs .box{width:100%;max-width:560px;margin:0 auto;background:#1d1933;border-radius:22px 22px 0 0;padding:20px 18px calc(20px + var(--sb))}
@@ -376,7 +377,7 @@ body.npopen #toast{bottom:auto;top:calc(14px + var(--st))}
       <button id="epPlay" aria-label="Tocar ou pausar"></button>
       <button class="ib skip" id="epFwd" aria-label="Avançar 30 segundos"><svg viewBox="0 0 24 24"><path d="M12 5V1l5 5-5 5V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"/></svg><b>30</b></button>
     </div>
-    <div class="acts"><button id="epSpeed"><b id="epRate">1×</b>Velocidade</button><button id="epSleep"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7z"/></svg><span id="epSleepT">Temporizador</span></button></div>
+    <div class="acts rnd"><button id="epSpeed"><span class="ci"><b id="epRate">1×</b></span>Velocidade</button><button id="epSleep"><span class="ci"><svg viewBox="0 0 24 24"><path d="M9.5 2A9.5 9.5 0 0 0 12 20.7 9.5 9.5 0 0 0 21.6 13 8 8 0 0 1 9.5 2z"/></svg></span><span id="epSleepT">Temporizador</span></button><button id="epCast" hidden><span class="ci"><svg viewBox="0 0 24 24"><path d="M21 3H3a2 2 0 0 0-2 2v3h2V5h18v14h-7v2h7a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM1 18v3h3a3 3 0 0 0-3-3zm0-4v2a5 5 0 0 1 5 5h2a7 7 0 0 0-7-7zm0-4v2a9 9 0 0 1 9 9h2A11 11 0 0 0 1 10z"/></svg></span><span id="epCastL">Transmitir</span></button></div>
     <p id="epDesc"></p>
   </div>
 </div>
@@ -584,7 +585,7 @@ function initials(n){return n.replace(/^(radio|rádio)\s+/i,'').replace(/[^\p{L}
 function logoSrcs(s){const a=[];if(s.logo)a.push(s.logo);if(s.dom)a.push(`https://www.google.com/s2/favicons?domain=${s.dom}&sz=256`);return a}
 function lg(s,cls,art){
   const srcs=art?[art]:logoSrcs(s);
-  const img=srcs.length?`<img src="${esc(srcs[0])}" ${srcs[1]?`data-alt="${esc(srcs[1])}"`:''} class="${art?'cover':''}" alt="" loading="lazy">`:'';
+  const img=srcs.length?`<img src="${esc(srcs[0])}" ${srcs[1]?`data-alt="${esc(srcs[1])}"`:''} class="${art?'cover':(s.code?'sq':'')}" alt="" loading="lazy">`:'';
   return `<span class="lg ${cls||''}" style="--c:${esc(s.c||hue(s.name))}"><i>${esc(initials(s.name))}</i>${img}</span>`;
 }
 /* logótipos quadrados (já com fundo próprio) ocupam o espaço todo, sem moldura branca */
@@ -1142,8 +1143,8 @@ function paintNow(msg){
 function npArtHtml(s,art){
   const logo=logoSrcs(s)[0]||'';
   let h=(logo?`<img class="blur" src="${esc(logo)}" alt="" onerror="this.remove()">`:'')+'<span class="shade"></span>'
-    +`<span class="logo"><i>${esc(initials(s.name))}</i>${logo?`<img src="${esc(logo)}" alt="" onerror="this.remove()">`:''}</span>`;
-  if(art)h+=`<img class="full" src="${esc(art)}" alt="" onerror="var b=this.nextElementSibling;if(b)b.remove();this.remove()">`+(logo?`<span class="badge"><img src="${esc(logo)}" alt="" onerror="this.parentNode.remove()"></span>`:'');
+    +`<span class="logo"><i>${esc(initials(s.name))}</i>${logo?`<img src="${esc(logo)}" class="${s.code?'sq':''}" alt="" onerror="this.remove()">`:''}</span>`;
+  if(art)h+=`<img class="full" src="${esc(art)}" alt="" onerror="var b=this.nextElementSibling;if(b)b.remove();this.remove()">`+(logo?`<span class="badge"><img src="${esc(logo)}" class="${s.code?'sq':''}" alt="" onerror="this.parentNode.remove()"></span>`:'');
   return h;
 }
 function npChips(s){
@@ -1333,7 +1334,7 @@ function paintTSheet(){
 function paintSleep(){
   const l=sleepAt?Math.max(1,Math.round((sleepAt-Date.now())/60e3)):0;
   $('#npSleepL').textContent=l?l+' min':'Temporizador';$('#npSleep').classList.toggle('hot',!!l);
-  $('#epSleepT').textContent=l?'Desliga em '+l+' min':'Temporizador';$('#epSleep').classList.toggle('hot',!!l);
+  $('#epSleepT').textContent=l?l+' min':'Temporizador';$('#epSleep').classList.toggle('hot',!!l);
 }
 function openBs(id){const m=$('#'+id);m.classList.add('open');m.setAttribute('aria-hidden','false')}
 function closeBs(id){const m=$('#'+id);m.classList.remove('open');m.setAttribute('aria-hidden','true')}
@@ -1393,10 +1394,12 @@ $('#ringSnooze').addEventListener('click',()=>{try{NATIVE.snooze(10)}catch(e){}h
 /* ---------- transmitir para Chromecast / colunas na rede ---------- */
 let castName='';
 function paintCast(){
-  const ok=!!(NATIVE&&NATIVE.cast);$('#npCast2').hidden=!ok;
+  const ok=!!(NATIVE&&NATIVE.cast);$('#npCast2').hidden=!ok;$('#epCast').hidden=!ok;
+  $('#epCastL').textContent=castName?castName:'Transmitir';$('#epCast').classList.toggle('hot',!!castName);
   $('#npCastL').textContent=castName?castName:'Transmitir';$('#npCast2').classList.toggle('hot',!!castName);
   $('#npCasting').hidden=!castName;$('#npCasting').textContent=castName?'A tocar em '+castName:'';
 }
+$('#epCast').addEventListener('click',()=>{try{NATIVE.cast()}catch(e){}});
 $('#npCast2').addEventListener('click',()=>{try{NATIVE.cast()}catch(e){toast('Não foi possível procurar dispositivos.')}});
 setInterval(paintSleep,30e3);
 try{castName=NATIVE&&NATIVE.castState?NATIVE.castState()||'':''}catch(e){}
