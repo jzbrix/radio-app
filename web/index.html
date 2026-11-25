@@ -458,7 +458,7 @@ function nativeAudio(){
       if(mode==='pod'&&NATIVE.resume&&src===sent&&!a.startPos)NATIVE.resume();
       else{
         const m=mode==='pod'&&ep?{id:'ep:'+ep.id,name:ep.title,artist:ep.podName,logo:ep.art||'',podcast:true,pos:Math.round((a.startPos||0)*1000)}
-          :{id:cur?cur.id:'',name:cur?cur.name:'',logo:cur?(logoSrcs(cur)[0]||''):''};
+          :{id:cur?cur.id:'',name:cur?cur.name:'',logo:cur?(logoSrcs(cur)[0]||''):'',code:cur&&cur.code||'',triton:cur&&cur.triton||''};
         NATIVE.play(src,JSON.stringify(m));sent=src;t=a.startPos||0;d=NaN;a.startPos=0;
         if(mode==='pod'&&rate!==1&&NATIVE.speed)NATIVE.speed(rate);
       }
@@ -483,7 +483,7 @@ const audio=NATIVE?nativeAudio():new Audio();audio.preload='none';
 let lastStations='';
 function pushStations(){
   if(!NATIVE)return;
-  const it=s=>({id:s.id,name:s.name,logo:logoSrcs(s)[0]||'',urls:s.urls||[]});
+  const it=s=>({id:s.id,name:s.name,logo:logoSrcs(s)[0]||'',urls:s.urls||[],code:s.code||'',triton:s.triton||''});
   const secs=[{id:'fav',title:'Favoritas',items:[...favs].map(byId).filter(Boolean).map(it)},
     {id:'pods',title:'Podcasts',items:subs.map(p=>({id:'pod:'+p.id,name:p.name,logo:p.art||'',urls:p.feed?[p.feed]:[]}))},
     {id:'main',title:'Principais',items:main.map(it)},{id:'rayo',title:'Canais temáticos',items:rayo.map(it)}];

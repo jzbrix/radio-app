@@ -97,6 +97,18 @@ class MainActivity : ComponentActivity() {
         connect()
     }
 
+    // com a app à vista, quem atualiza a música é a página; escondida, é o serviço
+    override fun onStart() {
+        super.onStart()
+        RadioService.appVisible = true
+    }
+
+    override fun onStop() {
+        RadioService.appVisible = false
+        RadioService.instance?.kickNow()
+        super.onStop()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         web.saveState(outState)
@@ -174,6 +186,8 @@ class MainActivity : ComponentActivity() {
             val name = o.optString("name", "Rádio")
             val logo = o.optString("logo", "")
             val pos = o.optLong("pos", 0L)
+            if (!o.optBoolean("podcast", false))
+                RadioService.sources[id] = RadioService.Src(name, o.optString("code", ""), o.optString("triton", ""))
             val meta = if (o.optBoolean("podcast", false))
                 Stations.episodeMeta(name, o.optString("artist", ""), logo)
             else Stations.metadata(name, logo)
@@ -234,7 +248,7 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun setNow(title: String, artist: String, art: String) {
-            runOnUiThread { RadioService.instance?.updateNow(title, artist, art) }
+            runOnUiThread { if (RadioService.appVisible) RadioService.instance?.updateNow(title, artist, art) }
         }
 
         @JavascriptInterface

@@ -35,6 +35,139 @@ class RadioService : MediaLibraryService() {
     companion object {
         @Volatile var instance: RadioService? = null
         const val WORKER = "https://radio-meta.foot4.workers.dev"
+        @Volatile var appVisible = false
+        data class Src(val name: String, val code: String, val triton: String)
+        val sources = ConcurrentHashMap<String, Src>()
+    }
+
+    // ---------- música a tocar, lida pelo próprio serviço (app em segundo plano ou Android Auto) ----------
+    private val artCache = ConcurrentHashMap<String, String>()
+    private var nowGen = 0
+    private val nowLoop = object : Runnable {
+        override fun run() {
+            ui.removeCallbacks(this)
+            val item = player.currentMediaItem
+            if (item == null || item.mediaId.startsWith("ep:") || !player.playWhenReady || appVisible) return
+            val id = item.mediaId
+            val url = item.localConfiguration?.uri?.toString() ?: ""
+            val st = Stations.find(this@RadioService, id)
+            val src = sources[id] ?: Src(st?.name ?: "", st?.code ?: "", st?.triton ?: "")
+            val g = ++nowGen
+            io.execute {
+                val r = try { fetchNow(src, url) } catch (e: Exception) { null }
+                ui.post {
+                    if (g != nowGen || player.currentMediaItem?.mediaId != id || appVisible) return@post
+                    if (r != null) applyNow(r.first, r.second)
+                    ui.postDelayed(this, 15000)
+                }
+            }
+        }
+    }
+
+    fun kickNow() { ui.post { ui.removeCallbacks(nowLoop); ui.postDelayed(nowLoop, 1500) } }
+
+    private fun get(u: String, timeout: Int = 12000): String {
+        val c = URL(u).openConnection() as HttpURLConnection
+        c.connectTimeout = timeout; c.readTimeout = timeout
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) RadioPT")
+        return c.inputStream.bufferedReader().use { it.readText() }
+    }
+
+    private fun jingle(artist: String, name: String): Boolean {
+        val a = artist.lowercase().trim()
+        return a.isEmpty() || Regex("^(radio |rádio )?(comercial|m80|cidade|smooth|rayo)\\b").containsMatchIn(a) || a == name.lowercase().trim()
+    }
+
+    /** Devolve (título, artista); título vazio = sem música (locução, publicidade). null = não se sabe. */
+    private fun fetchNow(src: Src, url: String): Pair<String, String>? {
+        if (src.code.isNotEmpty()) {
+            val f = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+            f.timeZone = java.util.TimeZone.getTimeZone("Europe/London")
+            val p = "events/" + src.code + "/" + URLEncoder.encode(f.format(java.util.Date()), "UTF-8") + "/20"
+            val arr = org.json.JSONArray(get(WORKER + "/bauer?p=" + URLEncoder.encode(p, "UTF-8") + "&_=" + System.currentTimeMillis()))
+            var best: org.json.JSONObject? = null; var bestAt = 0L
+            for (i in 0 until arr.length()) {
+                val e = arr.getJSONObject(i)
+                val t = e.optString("nowPlayingTrack"); val a = e.optString("nowPlayingArtist")
+                if (t.isEmpty() || jingle(a, src.name)) continue
+                val at = f.parse(e.optString("nowPlayingTime"))?.time ?: continue
+                if (at > bestAt) { bestAt = at; best = e }
+            }
+            val b = best ?: return Pair("", "")
+            val dur = b.optString("nowPlayingDuration").toLongOrNull() ?: 240L
+            return if (System.currentTimeMillis() < bestAt + (dur + 75) * 1000) Pair(b.optString("nowPlayingTrack"), b.optString("nowPlayingArtist")) else Pair("", "")
+        }
+        if (src.triton.isNotEmpty()) {
+            val x = get("https://np.tritondigital.com/public/nowplaying?mountName=" + URLEncoder.encode(src.triton, "UTF-8") + "&numberToFetch=5&eventType=track&_=" + System.currentTimeMillis())
+            val info = Regex("<nowplaying-info[\\s\\S]*?</nowplaying-info>").findAll(x)
+            for (m in info) {
+                fun prop(n: String) = Regex("<property name=\"" + n + "\"[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</property>").find(m.value)?.groupValues?.get(1)?.trim() ?: ""
+                val t = tc(prop("cue_title")); val a = tc(prop("track_artist_name"))
+                if (t.isEmpty() || jingle(a, src.name)) continue
+                val start = prop("cue_time_start").toLongOrNull() ?: 0L
+                val dur = (prop("cue_time_duration").toLongOrNull() ?: 240000L)
+                return if (start == 0L || System.currentTimeMillis() < start + dur + 75000) Pair(t, a) else Pair("", "")
+            }
+            return Pair("", "")
+        }
+        if (url.contains(".m3u8")) return null
+        val j = org.json.JSONObject(get(WORKER + "/meta?url=" + URLEncoder.encode(url, "UTF-8") + "&_=" + System.currentTimeMillis(), 15000))
+        if (j.optBoolean("unchanged")) return null
+        if (j.isNull("title")) return null
+        return split(j.optString("title"))
+    }
+
+    private fun tc(x: String): String =
+        if (x.isNotEmpty() && x == x.uppercase() && x.any { it.isLetter() })
+            x.lowercase().split(" ").joinToString(" ") { w -> w.replaceFirstChar { it.titlecase() } } else x
+
+    private fun split(raw: String): Pair<String, String> {
+        val r = raw.trim()
+        if (r.isEmpty() || r.startsWith("<") || r.startsWith("{")) return Pair("", "")
+        val i = r.indexOf(" - ")
+        return if (i > 0) Pair(r.substring(i + 3).trim(), r.substring(0, i).trim()) else Pair(r, "")
+    }
+
+    private fun applyNow(title: String, artist: String) {
+        if (title.isEmpty()) { updateNow("", "", ""); return }
+        val key = "$artist|$title".lowercase()
+        val known = artCache[key]
+        updateNow(title, artist, known ?: "")
+        if (known == null) io.execute {
+            val art = try { findArt(artist, title) } catch (e: Exception) { "" }
+            artCache[key] = art
+            if (art.isNotEmpty()) ui.post { if (!appVisible) updateNow(title, artist, art) }
+        }
+    }
+
+    private fun findArt(artist: String, title: String): String {
+        val q = URLEncoder.encode("$artist $title".trim(), "UTF-8")
+        try {
+            val r = org.json.JSONObject(get("https://itunes.apple.com/search?media=music&entity=song&country=PT&limit=1&term=$q", 8000)).optJSONArray("results")
+            val a = r?.optJSONObject(0)?.optString("artworkUrl100") ?: ""
+            if (a.isNotEmpty()) return a.replace("100x100bb", "600x600bb")
+        } catch (e: Exception) {}
+        val d = org.json.JSONObject(get("https://api.deezer.com/search?limit=1&q=$q", 8000)).optJSONArray("data")
+        return d?.optJSONObject(0)?.optJSONObject("album")?.optString("cover_xl") ?: ""
+    }
+
+    // músicas que vêm dentro do próprio som (ICY ou ID3)
+    private fun inStream(md: androidx.media3.common.Metadata) {
+        if (appVisible) return
+        val id = player.currentMediaItem?.mediaId ?: return
+        if (id.startsWith("ep:")) return
+        val s = sources[id]
+        if (s != null && (s.code.isNotEmpty() || s.triton.isNotEmpty())) return
+        var t = ""; var a = ""
+        for (i in 0 until md.length()) {
+            val e = md.get(i)
+            if (e is androidx.media3.extractor.metadata.icy.IcyInfo) { val p = split(e.title ?: ""); t = p.first; a = p.second }
+            if (e is androidx.media3.extractor.metadata.id3.TextInformationFrame) {
+                val v = e.values.firstOrNull() ?: ""
+                if (e.id == "TIT2") t = v else if (e.id == "TPE1") a = v
+            }
+        }
+        if (t.isNotEmpty()) applyNow(t, a)
     }
 
     private data class Ep(val url: String, val title: String, val pod: String, val art: String)
@@ -87,6 +220,15 @@ class RadioService : MediaLibraryService() {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 ui.removeCallbacks(saver)
                 if (isPlaying) ui.postDelayed(saver, 5000) else savePos()
+                if (isPlaying && !appVisible) kickNow()
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) { nowGen++; if (!appVisible) kickNow() }
+            }
+
+            override fun onMetadata(metadata: androidx.media3.common.Metadata) {
+                inStream(metadata)
             }
         })
         val open = PendingIntent.getActivity(
@@ -107,6 +249,7 @@ class RadioService : MediaLibraryService() {
     override fun onDestroy() {
         instance = null
         ui.removeCallbacks(saver)
+        ui.removeCallbacks(nowLoop)
         io.shutdown()
         session?.run {
             player.release()

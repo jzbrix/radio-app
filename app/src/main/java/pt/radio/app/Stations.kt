@@ -9,7 +9,7 @@ import androidx.media3.common.MimeTypes
 import org.json.JSONObject
 
 /** Lista de rádios que a app (parte web) envia, guardada para o Android Auto a poder mostrar mesmo com a app fechada. */
-data class Station(val id: String, val name: String, val logo: String, val urls: List<String>)
+data class Station(val id: String, val name: String, val logo: String, val urls: List<String>, val code: String = "", val triton: String = "")
 data class Section(val id: String, val title: String, val items: List<Station>)
 
 object Stations {
@@ -33,7 +33,8 @@ object Stations {
                     val u = o.optJSONArray("urls")
                     Station(
                         o.getString("id"), o.getString("name"), o.optString("logo", ""),
-                        if (u == null) emptyList() else (0 until u.length()).map { k -> u.getString(k) }
+                        if (u == null) emptyList() else (0 until u.length()).map { k -> u.getString(k) },
+                        o.optString("code", ""), o.optString("triton", "")
                     )
                 })
             }
