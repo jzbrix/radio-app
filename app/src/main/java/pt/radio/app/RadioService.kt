@@ -46,6 +46,7 @@ class RadioService : MediaLibraryService() {
     companion object {
         @Volatile var instance: RadioService? = null
         const val WORKER = "https://radio-meta.foot4.workers.dev"
+        const val LAG = 16000L // o som chega uns segundos depois de a rádio anunciar a música
         @Volatile var appVisible = false
         @Volatile var ringing = false
         @Volatile var ringName = ""
@@ -107,14 +108,15 @@ class RadioService : MediaLibraryService() {
                 val t = e.optString("nowPlayingTrack"); val a = e.optString("nowPlayingArtist")
                 if (t.isEmpty() || jingle(a, src.name)) continue
                 val at = f.parse(e.optString("nowPlayingTime"))?.time ?: continue
+                if (at + LAG > System.currentTimeMillis()) continue // ainda não chegou ao som
                 if (at > bestAt) { bestAt = at; best = e }
             }
             val b = best ?: return Pair("", "")
             val dur = b.optString("nowPlayingDuration").toLongOrNull() ?: 240L
-            return if (System.currentTimeMillis() < bestAt + (dur + 75) * 1000) Pair(b.optString("nowPlayingTrack"), b.optString("nowPlayingArtist")) else Pair("", "")
+            return if (System.currentTimeMillis() < bestAt + LAG + (dur + 75) * 1000) Pair(b.optString("nowPlayingTrack"), b.optString("nowPlayingArtist")) else Pair("", "")
         }
         if (src.triton.isNotEmpty()) {
-            val x = get("https://np.tritondigital.com/public/nowplaying?mountName=" + URLEncoder.encode(src.triton, "UTF-8") + "&numberToFetch=5&eventType=track&_=" + System.currentTimeMillis())
+            val x = get("https://np.tritondigital.com/public/nowplaying?mountName=" + URLEncoder.encode(src.triton, "UTF-8") + "&numberToFetch=8&eventType=track&_=" + System.currentTimeMillis())
             val info = Regex("<nowplaying-info[\\s\\S]*?</nowplaying-info>").findAll(x)
             for (m in info) {
                 fun prop(n: String) = Regex("<property name=\"" + n + "\"[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</property>").find(m.value)?.groupValues?.get(1)?.trim() ?: ""
@@ -122,7 +124,8 @@ class RadioService : MediaLibraryService() {
                 if (t.isEmpty() || jingle(a, src.name)) continue
                 val start = prop("cue_time_start").toLongOrNull() ?: 0L
                 val dur = (prop("cue_time_duration").toLongOrNull() ?: 240000L)
-                return if (start == 0L || System.currentTimeMillis() < start + dur + 75000) Pair(t, a) else Pair("", "")
+                if (start > 0 && start + LAG > System.currentTimeMillis()) continue // ainda não chegou ao som
+                return if (start == 0L || System.currentTimeMillis() < start + LAG + dur + 75000) Pair(t, a) else Pair("", "")
             }
             return Pair("", "")
         }
@@ -301,7 +304,15 @@ class RadioService : MediaLibraryService() {
         val r = if (item.localConfiguration == null) resolve(item) else item
         val uri = r.localConfiguration?.uri?.toString() ?: return r
         val mime = r.localConfiguration?.mimeType ?: if (uri.contains(".m3u8")) MimeTypes.APPLICATION_M3U8 else MimeTypes.AUDIO_MPEG
-        return r.buildUpon().setMimeType(mime).build()
+        val b = r.buildUpon().setMimeType(mime)
+        if (!r.mediaId.startsWith("ep:")) {
+            // na TV mostra-se a rádio (a música não é atualizada lá)
+            val st = Stations.find(this, r.mediaId)
+            val name = st?.name ?: (r.mediaMetadata.station?.toString() ?: r.mediaMetadata.title?.toString() ?: "Rádio")
+            val logo = st?.logo?.ifEmpty { null } ?: sources[r.mediaId]?.logo ?: ""
+            b.setMediaMetadata(Stations.metadata(name, logo))
+        }
+        return b.build()
     }
 
     private fun switchTo(target: Player) {
@@ -453,24 +464,8 @@ class RadioService : MediaLibraryService() {
     /** A app no telemóvel diz qual a música a tocar: aparece na notificação e no ecrã do carro. */
     fun updateNow(title: String, artist: String, art: String) {
         val key = "$title|$artist|$art"
-        val cp = castPlayer
-        if (cp != null && active === cp) {
-            // na TV: voltar a enviar a emissão com a música nova (só quando muda)
-            if (key == lastNow) return
-            val item = cp.currentMediaItem ?: return
-            if (item.mediaId.startsWith("ep:")) return
-            val tk = "$title|$artist"
-            if (lastNow.substringBeforeLast('|') == tk && art.isEmpty()) return
-            lastNow = key
-            val st = Stations.find(this, item.mediaId)
-            val name = st?.name ?: (item.mediaMetadata.station?.toString() ?: "")
-            val logo = st?.logo?.ifEmpty { null } ?: sources[item.mediaId]?.logo ?: ""
-            val meta = Stations.metadata(name, logo, title, artist, art)
-            val play = cp.playWhenReady
-            cp.setMediaItem(castable(item.buildUpon().setMediaMetadata(meta).build()))
-            cp.prepare(); cp.playWhenReady = play
-            return
-        }
+        // na TV não se mexe: voltar a enviar a emissão faz repetir anúncios e saltar a música
+        if (castPlayer != null && active === castPlayer) return
         if (key == lastNow || player.mediaItemCount == 0 || active !== player) return
         lastNow = key
         val item = player.currentMediaItem ?: return

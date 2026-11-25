@@ -437,6 +437,7 @@ const SERVERS=['https://de1.api.radio-browser.info','https://de2.api.radio-brows
 const HLSJS=['https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js','https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js'];
 /* Grupo Bauer (Comercial, M80, Cidade, Smooth): o stream normal traz artista, música, álbum, vídeo e programa; o HLS fica de reserva */
 const BAUER=n=>[`https://stream-hls.bauermedia.pt/${n}.aac/playlist.m3u8`,`https://stream-icy.bauermedia.pt/${n}.mp3`];
+const API_LAG=16000; /* atraso médio do som em relação à API das rádios (Bauer, Triton) */
 const isEv=s=>!!s&&(!!s.code||!!s.triton||s.urls.some(u=>/bauermedia\.pt/.test(u))); /* rádios Bauer: música vem da API (ou só no instante em que começa) */
 const BMAIN={'c-comercial':'rcm','c-m80':'mfm','c-cidade':'cdd','c-smooth':'sff'};
 const wk=()=>WORKER;
@@ -962,6 +963,18 @@ function startMeta(){
   stopMeta();const g=++metaGen,s=cur,url=s.urls[ci];
   if(s.code||s.triton){
     if(s.onair&&s.onair.episodeTitle)now.show=s.onair.episodeTitle;
+    /* a API diz a música no instante em que começa na rádio; o som chega ao telemóvel uns segundos depois */
+    let applyT=null;
+    const apply=()=>{
+      clearTimeout(applyT);if(g!==metaGen||!s.apiHist)return;
+      const t=Date.now(),ev=s.apiHist;
+      const c0=ev.find(e=>e.at+API_LAG<=t);
+      const live=c0&&t<c0.at+API_LAG+((c0.dur||240)+75)*1000;
+      if(live)gotMeta({artist:c0.artist,title:c0.title,art:c0.art,start:c0.at+API_LAG,dur:c0.dur},'api');else gotMeta({artist:'',title:''},'api');
+      paintNow();
+      const nx=ev.filter(e=>e.at+API_LAG>t).sort((a,b)=>a.at-b.at)[0];
+      if(nx)applyT=setTimeout(apply,nx.at+API_LAG-t+200);
+    };
     const run=async()=>{
       if(g!==metaGen)return;
       let ev=null;try{ev=s.code?await bauerEvents(s):await tritonEvents(s)}catch(e){}
@@ -969,10 +982,8 @@ function startMeta(){
       try{
         if(ev){
           for(const e of ev){const o=s.apiHist&&s.apiHist.find(y=>y.at===e.at);if(o&&o.art&&!e.art)e.art=o.art}
-          s.apiHist=ev;const c0=ev[0];if(!s.code)histArt(s);
-          const live=c0&&Date.now()<c0.at+((c0.dur||240)+75)*1000;
-          if(live)gotMeta({artist:c0.artist,title:c0.title,art:c0.art,start:c0.at,dur:c0.dur},'api');else gotMeta({artist:'',title:''},'api');
-          paintNow();
+          s.apiHist=ev;if(!s.code)histArt(s);
+          apply();
         }
       }catch(e){}
       finally{if(g===metaGen)metaTimer=setTimeout(run,15000)}
@@ -1138,7 +1149,7 @@ function paintNow(msg){
   if(mode==='radio')$('#miniArt').outerHTML=lg(s,'',art).replace('class="lg ','id="miniArt" class="lg ');
   if(mode==='radio'){$('#miniT').textContent=has?now.title:s.name;
   $('#miniS').textContent=has?[now.artist,s.name].filter(Boolean).join(' · '):(now.show||sub(s));}
-  const h=(s.apiHist?s.apiHist.map(e=>Object.assign({st:s.name,t:e.artist+' - '+e.title},e)):hist.filter(x=>x.st===s.name)).filter(x=>!(has&&norm(x.title)===norm(now.title))).slice(0,20);
+  const h=(s.apiHist?s.apiHist.filter(e=>e.at+API_LAG<=Date.now()).map(e=>Object.assign({st:s.name,t:e.artist+' - '+e.title},e)):hist.filter(x=>x.st===s.name)).filter(x=>!(has&&norm(x.title)===norm(now.title))).slice(0,20);
   $('#npHist').innerHTML=h.length?h.map(x=>songRow(x,false)).join(''):'<p class="msg" style="padding:12px 0;text-align:left">As músicas desta rádio vão aparecendo aqui.</p>';
   ms();
 }

@@ -28,7 +28,7 @@ class CastConverter : MediaItemConverter {
         md.putString(MediaMetadata.KEY_TITLE, title)
         val artist = m.artist?.toString() ?: ""
         if (live) {
-            md.putString(MediaMetadata.KEY_ARTIST, if (artist.isNotEmpty() && artist != "Em direto") artist else station)
+            md.putString(MediaMetadata.KEY_ARTIST, if (artist.isNotEmpty() && artist != "Em direto") artist else "Em direto")
             if (station.isNotEmpty()) md.putString(MediaMetadata.KEY_ALBUM_TITLE, station)
         } else {
             md.putString(MediaMetadata.KEY_SUBTITLE, artist)
