@@ -182,6 +182,8 @@ body.drag{user-select:none;-webkit-user-select:none}
 .acts.rnd .ci{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.1);transition:background .15s}
 .acts.rnd>*:active .ci{background:rgba(255,255,255,.2)}
 .acts.rnd .hot{color:var(--acc2)}.acts.rnd .hot .ci{background:color-mix(in srgb,var(--acc) 30%,transparent)}
+.acts.rnd>*{min-width:0}.acts.rnd>*>span:not(.ci){display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#np,#ep{overflow-x:hidden}
 .acts.rnd .ci b{font-size:14px;font-weight:800;letter-spacing:-.02em}
 .acts.rnd svg{width:26px;height:26px;fill:currentColor}
 .bs{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:none;align-items:flex-end}.bs.open{display:flex}
@@ -1395,8 +1397,8 @@ $('#ringSnooze').addEventListener('click',()=>{try{NATIVE.snooze(10)}catch(e){}h
 let castName='';
 function paintCast(){
   const ok=!!(NATIVE&&NATIVE.cast);$('#npCast2').hidden=!ok;$('#epCast').hidden=!ok;
-  $('#epCastL').textContent=castName?castName:'Transmitir';$('#epCast').classList.toggle('hot',!!castName);
-  $('#npCastL').textContent=castName?castName:'Transmitir';$('#npCast2').classList.toggle('hot',!!castName);
+  $('#epCastL').textContent=castName?'A transmitir':'Transmitir';$('#epCast').classList.toggle('hot',!!castName);
+  $('#npCastL').textContent=castName?'A transmitir':'Transmitir';$('#npCast2').classList.toggle('hot',!!castName);
   $('#npCasting').hidden=!castName;$('#npCasting').textContent=castName?'A tocar em '+castName:'';
 }
 $('#epCast').addEventListener('click',()=>{try{NATIVE.cast()}catch(e){}});
