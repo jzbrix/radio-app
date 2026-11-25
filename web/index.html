@@ -44,7 +44,7 @@ svg{width:24px;height:24px;fill:currentColor;flex:none}
 .shin{max-width:620px;margin:0 auto;padding:calc(8px + var(--st)) 20px calc(40px + var(--sb))}
 #v-pods .hd{display:flex;flex-direction:column;align-items:stretch;gap:10px}
 #songsBack{margin-left:-8px}
-.tools{display:flex;align-items:center;gap:6px;margin:2px 0 6px}.sec h2 .tools{margin:0 0 0 auto}
+.tools:empty{display:none}.tools{display:flex;align-items:center;gap:6px;margin:2px 0 6px}.sec h2 .tools{margin:0 0 0 auto}
 .tools button{display:flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;border-radius:17px;background:var(--s1);color:var(--mut);font-size:13px;font-weight:600}
 .sec h2 .tools button{margin:0;color:var(--mut);font-size:13px}
 .tools button{white-space:nowrap}.sec h2 .tools .srt span{display:none}.tools svg{flex:none;width:18px;height:18px;fill:currentColor}.tools .srt{margin-right:auto}
@@ -255,6 +255,10 @@ body.npopen #toast{bottom:auto;top:calc(14px + var(--st))}
 
 <section class="view" id="v-pods">
   <header class="hd"><h1>Podcasts</h1></header>
+  <div class="tabs" role="tablist" id="podTabs">
+    <button role="tab" data-pt="subs">Seguidos</button><button role="tab" data-pt="new">Novos</button><button role="tab" data-pt="cont">A meio</button><button role="tab" data-pt="top">Top 100</button>
+  </div>
+  <div class="sec"><div class="tools" id="podTools"></div></div>
   <div class="sec" id="podBody"></div>
 </section>
 
@@ -714,10 +718,11 @@ function hubEpsHtml(){
 async function loadHubEps(){
   if(hubBusy)return;hubBusy=true;
   const out=[];
-  await Promise.all(subs.slice(0,12).map(async p=>{try{const j=await getPod(p.id);out.push(...j.episodes.slice(0,3))}catch(e){}}));
+  await Promise.all(subs.slice(0,12).map(async p=>{try{const j=await getPod(p.id);out.push(...j.episodes.slice(0,6))}catch(e){}}));
   const lim=Date.now()-14*864e5;
   hubEps=out.filter(e=>(e.date||0)>lim).sort((a,b)=>b.date-a.date);hubEpsAt=Date.now();hubBusy=false;
   const x=$('#hubEps');if(x)x.innerHTML=hubEpsHtml();
+  const y=$('#podNew');if(y)y.innerHTML=newEpsHtml();
 }
 /* ---------- procurar: rádios e podcasts juntos ---------- */
 let podFound={},sq=0;
@@ -1228,17 +1233,34 @@ function epRow(e,showPod){
   const playing=mode==='pod'&&ep&&ep.id===e.id&&!audio.paused;
   return `<button class="eprow${done?' done':''}" data-ep="${esc(e.id)}">${lg({name:e.podName||'?',c:hue(e.podName||'?')},'',e.art)}<span class="tx"><b>${esc(e.title)}</b><small>${esc(meta)}</small>${pct&&!done?`<span class="pb"><i style="width:${pct.toFixed(1)}%"></i></span>`:''}</span><span class="pl">${playing?IC.pause:IC.play}</span></button>`;
 }
+let podTab=LS.get('ptab','');
 function renderPods(){
-  if(podQ.length>=2)return;
-  const cont=Object.entries(epPos).filter(([id,v])=>!v.done&&v.pos>30&&epMeta[id]).sort((a,b)=>b[1].t-a[1].t).slice(0,5);
-  let h='';
-  if(cont.length)h+='<h2>Continuar a ouvir</h2>'+cont.map(([id])=>epRow(epMeta[id],true)).join('');
+  if(!podTab)podTab=subs.length?'subs':'top';
+  document.querySelectorAll('#podTabs [data-pt]').forEach(b=>{const on=b.dataset.pt===podTab;b.setAttribute('aria-selected',on);b.classList.toggle('on',on)});
   const pshow=(arr,k)=>layOf(k)==='list'?`<div class="rl">${arr.map(p=>podRow(p,canDrag(k)?k:'')).join('')}</div>`:`<div class="grid g4">${arr.map(podTile).join('')}</div>`;
-  h+='<h2>Os teus podcasts'+(subs.length?tools('psubs',1):'')+'</h2>'+(subs.length?pshow(sortPods(subs,'psubs'),'psubs'):'<p class="msg">Ainda não segues nenhum podcast. Escolhe um do top ou procura em Procurar e toca em Seguir.</p>');
-  h+=`<button class="row lr" data-go="search"><span class="lg" style="--c:var(--s2)"><svg viewBox="0 0 24 24" style="width:26px;height:26px;fill:currentColor"><path d="M10.5 3a7.5 7.5 0 0 1 6 12l4.3 4.3-1.5 1.5-4.3-4.3A7.5 7.5 0 1 1 10.5 3zm0 2.2a5.3 5.3 0 1 0 0 10.6 5.3 5.3 0 0 0 0-10.6z"/></svg></span><span class="tx"><b>Procurar outro podcast</b><small>Qualquer podcast disponível na Apple, pelo nome</small></span></button>`;
-  h+=`<h2>Top 100 Portugal${tools('ptop',1)}</h2><div id="podTop">${podTop?pshow(sortPods(podTop,'ptop'),'ptop'):'<p class="msg">A carregar…</p>'}</div>`;
-  $('#podBody').innerHTML=h;
-  if(!podTop)loadTop().then(t=>{const el=$('#podTop');if(el)el.innerHTML=t.length?pshow(sortPods(t,'ptop'),'ptop'):'<p class="msg">Não consegui carregar o top. Tenta mais tarde.</p>'});
+  const find='<button class="row lr" data-go="search"><span class="lg" style="--c:var(--s2)"><svg viewBox="0 0 24 24" style="width:26px;height:26px;fill:currentColor"><path d="M10.5 3a7.5 7.5 0 0 1 6 12l4.3 4.3-1.5 1.5-4.3-4.3A7.5 7.5 0 1 1 10.5 3zm0 2.2a5.3 5.3 0 1 0 0 10.6 5.3 5.3 0 0 0 0-10.6z"/></svg></span><span class="tx"><b>Procurar outro podcast</b><small>Qualquer podcast disponível na Apple, pelo nome</small></span></button>';
+  const tl=$('#podTools'),el=$('#podBody');let h='';
+  if(podTab==='subs'){
+    tl.innerHTML=subs.length?tools('psubs'):'';
+    h=subs.length?pshow(sortPods(subs,'psubs'),'psubs'):'<p class="msg">Ainda não segues nenhum podcast. Escolhe um no Top 100 ou procura e toca em Seguir.</p>'+find;
+  }else if(podTab==='cont'){
+    tl.innerHTML='';
+    const cont=Object.entries(epPos).filter(([id,v])=>!v.done&&v.pos>30&&epMeta[id]).sort((a,b)=>(b[1].t||0)-(a[1].t||0)).slice(0,50);
+    h=cont.length?cont.map(([id])=>epRow(epMeta[id],true)).join(''):'<p class="msg">Os episódios que deixares a meio aparecem aqui.</p>';
+  }else if(podTab==='new'){
+    tl.innerHTML='';
+    if(!subs.length)h='<p class="msg">Segue alguns podcasts para veres aqui os episódios novos.</p>';
+    else{h='<div id="podNew">'+(hubEps?newEpsHtml():'<p class="msg">A carregar…</p>')+'</div>';if(!hubEps||Date.now()-hubEpsAt>15*60e3)loadHubEps()}
+  }else{
+    tl.innerHTML=tools('ptop');
+    h='<div id="podTop">'+(podTop?pshow(sortPods(podTop,'ptop'),'ptop'):'<p class="msg">A carregar…</p>')+'</div>'+find;
+    if(!podTop)loadTop().then(t=>{const x=$('#podTop');if(x)x.innerHTML=t.length?pshow(sortPods(t,'ptop'),'ptop'):'<p class="msg">Não consegui carregar o top. Tenta mais tarde.</p>'});
+  }
+  el.innerHTML=h;
+}
+function newEpsHtml(){
+  const l=(hubEps||[]).filter(e=>!(epPos[e.id]&&epPos[e.id].done)).slice(0,40);
+  return l.length?l.map(e=>epRow(e,true)).join(''):'<p class="msg">Sem episódios novos nas últimas duas semanas.</p>';
 }
 async function searchPods(q){
   $('#podBody').innerHTML='<p class="msg">A procurar…</p>';
@@ -1382,6 +1404,7 @@ document.addEventListener('click',e=>{
   if(clr){if(clr.dataset.ok){hist=[];LS.set('hist',hist);renderSongs();if(cur)paintNow()}else{clr.dataset.ok=1;clr.textContent='Toca outra vez para confirmar'}}
 });
 $('#nav').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)setView(b.dataset.v)});
+$('#podTabs').addEventListener('click',e=>{const b=e.target.closest('[data-pt]');if(!b)return;podTab=b.dataset.pt;LS.set('ptab',podTab);renderPods();window.scrollTo({top:0})});
 $('#homeTabs').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;homeTab=b.dataset.t;LS.set('tab',homeTab);allShown=60;renderHome();window.scrollTo({top:0})});
 $('#homeBody').addEventListener('click',e=>{if(e.target.closest('#moreAll')){allShown+=60;renderHome()}});
 let qt,qpt;$('#q').addEventListener('input',e=>{clearTimeout(qt);clearTimeout(qpt);qt=setTimeout(()=>{q=e.target.value;renderSearch()},120);qpt=setTimeout(searchAllPods,450)});
