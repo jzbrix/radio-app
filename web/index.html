@@ -113,11 +113,11 @@ body.drag{user-select:none;-webkit-user-select:none}
 .lg img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;padding:8%}
 .lg img.cover{object-fit:cover;padding:0;background:#000}
 .lg img.sq,.art.brand .logo img.sq,.art .badge img.sq{object-fit:cover;padding:0}
-.eq{position:absolute;right:6px;bottom:6px;display:flex;gap:2px;align-items:flex-end;height:14px;padding:3px;border-radius:6px;background:rgba(0,0,0,.6)}
-.eq b{width:3px;background:var(--acc);border-radius:1px;animation:eq .9s ease-in-out infinite}
+.eq{position:absolute;right:6px;bottom:6px;display:flex;gap:2px;align-items:flex-end;height:16px;padding:3px 4px;border-radius:8px;background:var(--acc);box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.eq b{width:3px;background:#fff;border-radius:1px;animation:eq .9s ease-in-out infinite}
 .eq b:nth-child(2){animation-delay:-.3s}.eq b:nth-child(3){animation-delay:-.6s}
 @keyframes eq{0%,100%{height:3px}50%{height:10px}}
-.paused .eq b{animation:none;height:4px}
+.paused .eq{display:none}
 /* lista */
 .row{display:flex;align-items:center;gap:12px;width:100%;padding:8px 0;text-align:left;border-radius:12px}
 .row .lg{width:52px;height:52px;border-radius:12px}
