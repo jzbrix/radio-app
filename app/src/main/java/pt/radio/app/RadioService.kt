@@ -306,6 +306,14 @@ class RadioService : MediaLibraryService() {
                         castDevice = ""; switchTo(player); onEvent?.invoke("cast", "")
                     }
                 })
+                // a TV recusou (formato que o Chromecast não aceita): continuar no telemóvel
+                cp.addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        castFailed = true
+                        onEvent?.invoke("toast", "Esta rádio não dá para transmitir. Continua a tocar no telemóvel.")
+                        try { cc.sessionManager.endCurrentSession(true) } catch (e: Exception) {}
+                    }
+                })
                 if (cp.isCastSessionAvailable) {
                     castDevice = cc.sessionManager.currentCastSession?.castDevice?.friendlyName ?: "TV"
                     switchTo(cp)
@@ -333,18 +341,26 @@ class RadioService : MediaLibraryService() {
         return b.build()
     }
 
+    // o último que se pediu para tocar (a TV pode ainda mostrar o anterior se recusou o novo)
+    private var wantedItem: MediaItem? = null
+    private var castFailed = false
+
     private fun switchTo(target: Player) {
         val s = session ?: return
         val from = s.player
         if (from === target) return
-        val item = from.currentMediaItem
-        val pos = from.currentPosition
-        val play = from.playWhenReady
+        val fromCast = from === castPlayer
+        val item = if (fromCast && wantedItem != null) wantedItem else from.currentMediaItem
+        val pos = if (fromCast && item?.mediaId != from.currentMediaItem?.mediaId) C.TIME_UNSET else from.currentPosition
+        // episódio que já acabou na TV: não recomeçar sozinho no telemóvel
+        val ended = from.playbackState == Player.STATE_ENDED && item?.mediaId == from.currentMediaItem?.mediaId
+        val play = castFailed || (from.playWhenReady && !ended)
+        castFailed = false
         from.stop()
         s.player = target
         if (item != null) {
             val it2 = castable(item)
-            if (item.mediaId.startsWith("ep:")) target.setMediaItem(it2, pos) else target.setMediaItem(it2)
+            if (item.mediaId.startsWith("ep:") && pos != C.TIME_UNSET) target.setMediaItem(it2, pos) else target.setMediaItem(it2)
             target.prepare()
             target.playWhenReady = play
         }
@@ -660,7 +676,7 @@ class RadioService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> =
-            Futures.immediateFuture(mediaItems.map { resolve(it) }.toMutableList())
+            Futures.immediateFuture(mediaItems.map { resolve(it) }.toMutableList().also { l -> l.firstOrNull()?.let { wantedItem = it } })
 
         // episódios começam onde ficaste
         // botão "tocar" do Bluetooth, auscultadores ou do carro sem nada escolhido: a última rádio
@@ -687,6 +703,7 @@ class RadioService : MediaLibraryService() {
                 if (pos <= 0) pos = C.TIME_UNSET
             }
             val items = mediaItems.map { resolve(it) }
+            wantedItem = items.getOrNull(if (startIndex == C.INDEX_UNSET) 0 else startIndex)
             return Futures.immediateFuture(
                 MediaSession.MediaItemsWithStartPosition(items, if (startIndex == C.INDEX_UNSET) 0 else startIndex, pos)
             )
