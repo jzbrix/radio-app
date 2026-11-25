@@ -106,7 +106,7 @@ body.drag{user-select:none;-webkit-user-select:none}
 .tile{display:flex;flex-direction:column;gap:7px;text-align:left}
 .tile .lg{width:100%;aspect-ratio:1;border-radius:16px}
 .tile span{font-size:13px;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tile.on .lg{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--acc)}
+.tile.on>span:last-child{color:var(--acc2)}
 .lg{position:relative;display:grid;place-items:center;overflow:hidden;background:var(--c,#2a3038);color:#fff;font-weight:800;letter-spacing:-.02em}
 .lg i{font-style:normal;font-size:17px}
 .tile .lg i{font-size:26px}
