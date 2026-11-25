@@ -47,6 +47,7 @@ class RadioService : MediaLibraryService() {
         @Volatile var instance: RadioService? = null
         const val WORKER = "https://radio-meta.foot4.workers.dev"
         const val LAG = 16000L // o som chega uns segundos depois de a rádio anunciar a música
+        const val LAG_BAUER = 55000L // na Bauer cada ligação começa com publicidade
         @Volatile var appVisible = false
         @Volatile var ringing = false
         @Volatile var ringName = ""
@@ -108,12 +109,12 @@ class RadioService : MediaLibraryService() {
                 val t = e.optString("nowPlayingTrack"); val a = e.optString("nowPlayingArtist")
                 if (t.isEmpty() || jingle(a, src.name)) continue
                 val at = f.parse(e.optString("nowPlayingTime"))?.time ?: continue
-                if (at + LAG > System.currentTimeMillis()) continue // ainda não chegou ao som
+                if (at + LAG_BAUER > System.currentTimeMillis()) continue // ainda não chegou ao som
                 if (at > bestAt) { bestAt = at; best = e }
             }
             val b = best ?: return Pair("", "")
             val dur = b.optString("nowPlayingDuration").toLongOrNull() ?: 240L
-            return if (System.currentTimeMillis() < bestAt + LAG + (dur + 75) * 1000) Pair(b.optString("nowPlayingTrack"), b.optString("nowPlayingArtist")) else Pair("", "")
+            return if (System.currentTimeMillis() < bestAt + LAG_BAUER + (dur + 75) * 1000) Pair(b.optString("nowPlayingTrack"), b.optString("nowPlayingArtist")) else Pair("", "")
         }
         if (src.triton.isNotEmpty()) {
             val x = get("https://np.tritondigital.com/public/nowplaying?mountName=" + URLEncoder.encode(src.triton, "UTF-8") + "&numberToFetch=8&eventType=track&_=" + System.currentTimeMillis())
