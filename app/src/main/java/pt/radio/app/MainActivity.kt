@@ -9,6 +9,8 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -18,7 +20,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -40,6 +44,18 @@ class MainActivity : ComponentActivity() {
     private var controller: MediaController? = null
     private val pending = ArrayList<(MediaController) -> Unit>()
     private var webStation: String? = null
+    private val ui = Handler(Looper.getMainLooper())
+    // posição do episódio para a barra de progresso da app
+    private val ticker = object : Runnable {
+        override fun run() {
+            val c = controller
+            if (c != null && c.isPlaying) {
+                val d = c.duration
+                emit("time", "${c.currentPosition},${if (d == C.TIME_UNSET) -1 else d}")
+                ui.postDelayed(this, 1000)
+            }
+        }
+    }
 
     private val askNotif = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -87,6 +103,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        ui.removeCallbacks(ticker)
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controller = null
         web.destroy()
@@ -122,12 +139,16 @@ class MainActivity : ComponentActivity() {
     private inner class PlayerEvents : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             val c = controller ?: return
-            if (isPlaying) emit("playing")
+            if (isPlaying) {
+                emit("playing")
+                ui.removeCallbacks(ticker); ui.post(ticker)
+            }
             else if (!c.playWhenReady || c.playbackState == Player.STATE_IDLE || c.playbackState == Player.STATE_ENDED) emit("pause")
         }
 
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_BUFFERING) emit("waiting")
+            if (state == Player.STATE_ENDED) emit("ended")
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -152,9 +173,13 @@ class MainActivity : ComponentActivity() {
             val id = o.optString("id", url)
             val name = o.optString("name", "Rádio")
             val logo = o.optString("logo", "")
+            val pos = o.optLong("pos", 0L)
+            val meta = if (o.optBoolean("podcast", false))
+                Stations.episodeMeta(name, o.optString("artist", ""), logo)
+            else Stations.metadata(name, logo)
             webStation = id
             withController { c ->
-                c.setMediaItem(Stations.playable(id, url, Stations.metadata(name, logo)))
+                c.setMediaItem(Stations.playable(id, url, meta, pos))
                 c.prepare()
                 c.play()
             }
@@ -163,6 +188,26 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun stop() {
             withController { c -> c.stop() }
+        }
+
+        @JavascriptInterface
+        fun pause() {
+            withController { c -> c.pause() }
+        }
+
+        @JavascriptInterface
+        fun resume() {
+            withController { c -> c.play() }
+        }
+
+        @JavascriptInterface
+        fun seek(ms: Double) {
+            withController { c -> c.seekTo(ms.toLong()) ; emit("time", "${ms.toLong()},${if (c.duration == C.TIME_UNSET) -1 else c.duration}") }
+        }
+
+        @JavascriptInterface
+        fun speed(rate: Double) {
+            withController { c -> c.setPlaybackSpeed(rate.toFloat()) }
         }
 
         @JavascriptInterface

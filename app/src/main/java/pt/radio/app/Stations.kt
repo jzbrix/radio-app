@@ -2,6 +2,7 @@ package pt.radio.app
 
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -52,7 +53,29 @@ object Stations {
             return secs.filter { it.items.isNotEmpty() }.map { folder("sec:" + it.id, it.title) }
         }
         val sec = secs.firstOrNull { "sec:" + it.id == parentId } ?: return emptyList()
-        return sec.items.map { browseItem(it) }
+        return sec.items.map { if (it.id.startsWith("pod:")) podFolder(it) else browseItem(it) }
+    }
+
+    private fun podFolder(s: Station): MediaItem {
+        val b = MediaMetadata.Builder()
+            .setTitle(s.name)
+            .setIsBrowsable(true)
+            .setIsPlayable(false)
+            .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST)
+        if (s.logo.isNotEmpty()) b.setArtworkUri(Uri.parse(s.logo))
+        return MediaItem.Builder().setMediaId(s.id).setMediaMetadata(b.build()).build()
+    }
+
+    fun episodeMeta(title: String, podcast: String, art: String): MediaMetadata {
+        val b = MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(podcast)
+            .setAlbumTitle(podcast)
+            .setIsBrowsable(false)
+            .setIsPlayable(true)
+            .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
+        if (art.isNotEmpty()) b.setArtworkUri(Uri.parse(art))
+        return b.build()
     }
 
     private fun folder(id: String, title: String): MediaItem =
@@ -88,12 +111,14 @@ object Stations {
         MediaItem.Builder().setMediaId(s.id).setMediaMetadata(metadata(s.name, s.logo)).build()
 
     /** Item pronto a tocar num endereço concreto. */
-    fun playable(id: String, url: String, meta: MediaMetadata): MediaItem {
+    fun playable(id: String, url: String, meta: MediaMetadata, pos: Long = 0L): MediaItem {
+        val rm = MediaItem.RequestMetadata.Builder().setMediaUri(Uri.parse(url))
+        if (pos > 0) rm.setExtras(Bundle().apply { putLong("pos", pos) })
         val b = MediaItem.Builder()
             .setMediaId(id)
             .setUri(url)
             .setMediaMetadata(meta)
-            .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(Uri.parse(url)).build())
+            .setRequestMetadata(rm.build())
         if (url.contains(".m3u8", ignoreCase = true)) b.setMimeType(MimeTypes.APPLICATION_M3U8)
         return b.build()
     }
