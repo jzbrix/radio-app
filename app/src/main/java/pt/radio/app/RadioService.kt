@@ -36,9 +36,10 @@ class RadioService : MediaLibraryService() {
         @Volatile var instance: RadioService? = null
         const val WORKER = "https://radio-meta.foot4.workers.dev"
         @Volatile var appVisible = false
-        data class Src(val name: String, val code: String, val triton: String)
         val sources = ConcurrentHashMap<String, Src>()
     }
+
+    data class Src(val name: String, val code: String, val triton: String)
 
     // ---------- música a tocar, lida pelo próprio serviço (app em segundo plano ou Android Auto) ----------
     private val artCache = ConcurrentHashMap<String, String>()
