@@ -569,6 +569,7 @@ function nativeAudio(){
     if(ev==='alarmoff'){hideRing();return}
     if(ev==='toast'){toast(String(arg||''));return}
     if(ev==='cast'){castName=String(arg||'');paintCast();if(castName)toast('A tocar em '+castName);return}
+    if(ev==='meta'){try{const m=JSON.parse(arg);if(mode==='radio'&&cur&&m.title){cur._st=Date.now();gotMeta({artist:m.artist,title:m.title,art:m.art||''},'stream');paintNow()}}catch(e){}return}
     if(ev==='sleepdone'){sleepAt=0;clearTimeout(sleepT);paintSleep();return}
     if(ev==='time'){const [p,q]=String(arg).split(',').map(Number);t=(p||0)/1000;d=q>0?q/1000:NaN;a.dispatchEvent(new Event('timeupdate'));return}
     if(ev==='playing')a.paused=false;
@@ -992,6 +993,7 @@ function startMeta(){
     const API_LAG=apiLag(s);
     const apply=()=>{
       clearTimeout(applyT);if(g!==metaGen||!s.apiHist)return;
+      if(s._st&&Date.now()-s._st<6*60e3)return; /* a música já vem certa dentro do próprio som */
       const t=Date.now(),ev=s.apiHist;
       const c0=ev.find(e=>e.at+API_LAG<=t);
       const live=c0&&t<c0.at+API_LAG+((c0.dur||240)+75)*1000;

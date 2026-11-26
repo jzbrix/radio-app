@@ -76,7 +76,7 @@ class RadioService : MediaLibraryService() {
                 val r = try { fetchNow(src, url) } catch (e: Exception) { null }
                 ui.post {
                     if (g != nowGen || active.currentMediaItem?.mediaId != id || appVisible) return@post
-                    if (r != null) applyNow(r.first, r.second)
+                    if (r != null && System.currentTimeMillis() - streamAt > 6 * 60000) applyNow(r.first, r.second)
                     ui.postDelayed(this, 15000)
                 }
             }
@@ -192,22 +192,37 @@ class RadioService : MediaLibraryService() {
     }
 
     // músicas que vêm dentro do próprio som (ICY ou ID3)
+    @Volatile var streamAt = 0L // última vez que a música veio dentro do próprio som (sincronizada)
+
+    private fun xmlTag(x: String, key: String): String =
+        Regex("<([A-Z_]*" + key + "[A-Z_]*)>\\s*(?:<!\\[CDATA\\[)?([^<\\]]*)").find(x)?.groupValues?.get(2)?.trim() ?: ""
+
+    /** Músicas que vêm dentro do próprio som: ICY, ID3 simples ou o XML "RadioInfo" das rádios portuguesas. */
     private fun inStream(md: androidx.media3.common.Metadata) {
-        if (appVisible) return
         val id = player.currentMediaItem?.mediaId ?: return
         if (id.startsWith("ep:")) return
-        val s = sources[id]
-        if (s != null && (s.code.isNotEmpty() || s.triton.isNotEmpty())) return
-        var t = ""; var a = ""
+        var t = ""; var a = ""; var art = ""; var xml = false
         for (i in 0 until md.length()) {
             val e = md.get(i)
             if (e is androidx.media3.extractor.metadata.icy.IcyInfo) { val p = split(e.title ?: ""); t = p.first; a = p.second }
             if (e is androidx.media3.extractor.metadata.id3.TextInformationFrame) {
-                val v = e.values.firstOrNull() ?: ""
-                if (e.id == "TIT2") t = v else if (e.id == "TPE1") a = v
+                val v = (e.values.firstOrNull() ?: "").trim()
+                if (v.startsWith("<")) {
+                    xml = true
+                    val tt = xmlTag(v, "TITLE_NAME").ifEmpty { xmlTag(v, "SONG_NAME") }
+                    val aa = xmlTag(v, "DALET_ARTIST_NAME").ifEmpty { xmlTag(v, "ARTIST_NAME") }
+                    if (tt.isNotEmpty()) { t = tt; a = aa; art = xmlTag(v, "ALBUM_IMAGE").let { if (it.startsWith("http")) it else "" } }
+                } else if (!xml) {
+                    if (e.id == "TIT2") t = v else if (e.id == "TPE1") a = v
+                }
             }
         }
-        if (t.isNotEmpty()) applyNow(t, a)
+        if (t.isEmpty() || t.startsWith("<")) return
+        val src = sources[id] ?: Stations.find(this, id)?.let { Src(it.name, it.code, it.triton, it.logo) }
+        if (a.isNotEmpty() && jingle(a, src?.name ?: "")) return
+        streamAt = System.currentTimeMillis()
+        if (appVisible) onEvent?.invoke("meta", org.json.JSONObject().put("title", tc(t)).put("artist", tc(a)).put("art", art).toString())
+        else applyNow(tc(t), tc(a))
     }
 
     private data class Ep(val url: String, val title: String, val pod: String, val art: String)
@@ -275,7 +290,7 @@ class RadioService : MediaLibraryService() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) { nowGen++; if (!appVisible) kickNow() }
+                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) { nowGen++; streamAt = 0L; if (!appVisible) kickNow() }
                 if (mediaItem != null) saveLast(mediaItem)
             }
 
@@ -289,7 +304,13 @@ class RadioService : MediaLibraryService() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        session = MediaLibrarySession.Builder(this, player, LibraryCallback())
+        // o sistema (notificação, ilha, Android Auto) vê só a informação que a app escolhe,
+        // e não o texto em bruto que algumas rádios metem dentro do som (ex.: XML da Comercial)
+        local = object : androidx.media3.common.ForwardingPlayer(player) {
+            override fun getMediaMetadata(): androidx.media3.common.MediaMetadata =
+                player.currentMediaItem?.mediaMetadata ?: androidx.media3.common.MediaMetadata.EMPTY
+        }
+        session = MediaLibrarySession.Builder(this, local, LibraryCallback())
             .setSessionActivity(open)
             .build()
         LAG = prefs.getLong("lagO", LAG); LAG_BAUER = prefs.getLong("lagB", LAG_BAUER)
@@ -303,7 +324,7 @@ class RadioService : MediaLibraryService() {
                         switchTo(cp); onEvent?.invoke("cast", castDevice)
                     }
                     override fun onCastSessionUnavailable() {
-                        castDevice = ""; switchTo(player); onEvent?.invoke("cast", "")
+                        castDevice = ""; switchTo(local); onEvent?.invoke("cast", "")
                     }
                 })
                 // a TV recusou (formato que o Chromecast não aceita): continuar no telemóvel
@@ -324,6 +345,7 @@ class RadioService : MediaLibraryService() {
 
     // ---------- transmitir (Chromecast) ----------
     private var castPlayer: CastPlayer? = null
+    private lateinit var local: Player
     val active: Player get() = session?.player ?: player
 
     private fun castable(item: MediaItem): MediaItem {
@@ -492,7 +514,7 @@ class RadioService : MediaLibraryService() {
             val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
             if (am.getStreamVolume(AudioManager.STREAM_MUSIC) < max * 2 / 5) am.setStreamVolume(AudioManager.STREAM_MUSIC, max * 2 / 5, 0)
         } catch (e: Exception) {}
-        if (castPlayer != null && session?.player === castPlayer) switchTo(player)
+        if (castPlayer != null && session?.player === castPlayer) switchTo(local)
         if (list.isNotEmpty()) {
             fallbackId = id; fallbackUrls = list; fallbackIndex = 0
             ramp = if (o.optBoolean("ramp", true)) 0.1f else 1f
@@ -562,7 +584,7 @@ class RadioService : MediaLibraryService() {
         val key = "$title|$artist|$art"
         // na TV não se mexe: voltar a enviar a emissão faz repetir anúncios e saltar a música
         if (castPlayer != null && active === castPlayer) return
-        if (key == lastNow || player.mediaItemCount == 0 || active !== player) return
+        if (key == lastNow || player.mediaItemCount == 0 || active === castPlayer) return
         lastNow = key
         val item = player.currentMediaItem ?: return
         val st = Stations.find(this, item.mediaId)
